@@ -7,11 +7,11 @@ export default function MessageBubble(props) {
         {...props}
         wrapperStyle={{
           right: {
-            backgroundColor: GlobalColors.primary, // Customize the background color for outgoing messages
+            backgroundColor: GlobalColors.primary, 
             padding: 5
           },
           left: {
-            backgroundColor: GlobalColors.background, // Customize the background color for incoming messages
+            backgroundColor: GlobalColors.background, 
             padding: 5  
         },
         }}

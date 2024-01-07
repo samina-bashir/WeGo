@@ -1,5 +1,11 @@
 {
   "expo": {
+    "packagerOpts": {
+      "config": "metro.config.js"
+    },
+    "extra": {
+      "YOUR_SERVER_URL": "http://192.168.100.176:3000"
+    },   
     "name": "WeGo",
     "slug": "WeGo",
     "version": "1.0.0",

@@ -1,9 +1,10 @@
 const GlobalColors = {
-    primary: '#518bbb',
-    secondary: '#bdd3e6',
+    primary: '#0c2442',
+    secondary: '#4e7290',
     background: '#ffffff',
     text: '#333333',
-    error: '#e74c3c',
+    error: '#cc0000',
+    lightGray:"#555"
   };
   
   export default GlobalColors;
