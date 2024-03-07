@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: 'red',
-    padding: 15,
+    padding: 10,
     borderRadius: 5,
     marginTop: 10,
   },
@@ -77,6 +77,7 @@ const styles = StyleSheet.create({
     color: 'white',
     textAlign: 'center',
     fontWeight: 'bold',
+    fontSize: 20,
   },
   callChatIcons: {
     flexDirection: 'column',
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   },
   detailsAndFareContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'flex-start'
   },
   detailsContainer: {
     flex: 1,
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     width: 300,
-    height: 330,
+    height: 400,
   },
   row: {
     flexDirection: 'row',
@@ -127,7 +128,8 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 19,
     fontWeight: 'bold',
-    paddingHorizontal:10
+    paddingHorizontal:10,
+    marginVertical: 10
   },
   fare: {
     fontSize: 25,
@@ -148,14 +150,17 @@ const styles = StyleSheet.create({
 
   },
   feedback: {
-    fontSize: 20,
+    fontSize: 16,
     fontStyle: 'italic',
     color: GlobalColors.primary,
-    paddingHorizontal:10
+    paddingHorizontal:10,
+    paddingBottom: 5
   },
   divider: {
-    width: 1,
-    backgroundColor: 'gray',
+    height: 1,
+    backgroundColor: GlobalColors.lightGray,
+    marginBottom: 5,
+    marginVertical: 15
   },
   input: {
     borderBottomWidth:0

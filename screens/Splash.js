@@ -28,7 +28,7 @@ const SplashScreen = () => {
                                 if (docSnap.data().status == 'unverified') {
                                     navigation.replace('OTP')
                                 } else if (docSnap.data().status == 'verified') {
-                                    navigation.replace("DuringRide")
+                                    navigation.replace("DuringRideHost")
                                 }
                             }, 1000)
                         }
@@ -39,7 +39,7 @@ const SplashScreen = () => {
                 }
             } else {
                 setTimeout(() => {
-                    navigation.replace('Admin')
+                    navigation.replace('DuringRideHost')
                 }, 1000)
             }
         })

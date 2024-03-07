@@ -4,7 +4,7 @@ const GlobalColors = {
     background: '#ffffff',
     text: '#333333',
     error: '#cc0000',
-    lightGray:"#555"
+    lightGray:"#ddd"
   };
   
   export default GlobalColors;

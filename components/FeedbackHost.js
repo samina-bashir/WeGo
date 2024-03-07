@@ -4,25 +4,20 @@ import styles from "../styles/globalStyles";
 import GlobalColors from "../styles/globalColors";
 import { View, Text, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import firebase from 'firebase/app';
-import 'firebase/firestore';
 import { addDoc, collection, getDoc, setDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { useSelector } from 'react-redux';
 
-export default function Feedback(props) {
-  const [hostMessage, setHostMessage] = useState('');
-  const [hostRating, setHostRating] = useState(0);
+export default function FeedbackHost(props) {
   const [riderRating, setRiderRating] = useState(Array(props.riders.length).fill(0));
   const [riderFeedbacks, setRiderFeedbacks] = useState(Array(props.riders.length).fill(''));
-  const isOverlayVisible = props?.visible;
+  const [isOverlayVisible, setOverlayVisible] = useState(true);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
   const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
 
   useEffect(() => {
-    if (feedbackSent.length === props.riders.length + 1) {
-      // Close overlay when all feedbacks are sent
+    if (feedbackSent.length === props.riders.length && props.riders.length!=0) {
       handleCloseOverlay();
     }
   }, [feedbackSent]);
@@ -42,15 +37,15 @@ export default function Feedback(props) {
   };
 
 
-  const handleSendFeedback = async (index, id, isHost) => {
+  const handleSendFeedback = async (index, id) => {
     try {
       const feedbackData = {
-        rating: isHost ? hostRating || 0 : riderRating[index] || 0,
-        feedback: isHost ? hostMessage || '' : riderFeedbacks[index] || '',
+        rating: riderRating[index] || 0,
+        feedback: riderFeedbacks[index] || '',
         ratedBy: currentUser._id
       };
-
-      await saveFeedback(id, isHost ? 'hostFeedback' : 'riderFeedback', feedbackData);
+   
+      await saveFeedback(id, 'riderFeedback', feedbackData);
       setFeedbackSent([...feedbackSent, index]);
     } catch (error) {
       console.error('Error storing feedback: ', error);
@@ -68,9 +63,9 @@ export default function Feedback(props) {
             imageSize={20}
             startingValue={0}
             onFinishRating={(rating) => {
-              const updatedRiderRatings = [...riderRating]; // Make a copy of the array
-              updatedRiderRatings[index] = rating; // Update the rating for the specific rider
-              setRiderRating(updatedRiderRatings); // Update the state with the new array
+              const updatedRiderRatings = [...riderRating]; 
+              updatedRiderRatings[index] = rating; 
+              setRiderRating(updatedRiderRatings); 
             }}
           />
           </View>
@@ -94,7 +89,7 @@ export default function Feedback(props) {
                 color={GlobalColors.primary}
                 size={25}
                 onPress={() => {
-                  handleSendFeedback(index, rider._id, false);
+                  handleSendFeedback(index, rider._id);
                 }}
               /></View>
           }
@@ -104,7 +99,7 @@ export default function Feedback(props) {
     ));
   };
 
-  const overlayHeight = props.riders?.length > 0 ? 180 + 30 + 120 * props.riders?.length : 180;
+  const overlayHeight = props.riders?.length > 0 ? 60 + 120 * props.riders?.length : 10;
 
   const saveFeedback = async (id, collectionName, data) => {
     try {
@@ -112,7 +107,6 @@ export default function Feedback(props) {
       const docSnap = await getDoc(feedbackRef);
     
       if (docSnap.exists()) {
-        console.log(data)
         // Document exists, update it
         await updateDoc(feedbackRef, {
           feedbacks: arrayUnion(data)
@@ -133,46 +127,11 @@ export default function Feedback(props) {
 
   return (
     <Overlay
-      isVisible={props.visible && isOverlayVisible}
+      isVisible={props.visible }
       overlayStyle={[styles.overlay, { height: overlayHeight }]}
     >
       <View style={styles.column}>
-        <View style={styles.column}>
-          <Text style={{ color: GlobalColors.primary, fontSize: 25, marginHorizontal: 8, fontWeight: 'bold' }}>Host</Text>
-          <View style={styles.row}>
-            <Text style={styles.name}>{props.host?.name}</Text>
-            <View pointerEvents={feedbackSent.includes('host') ? 'none' : 'auto'} style={{ marginLeft: 'auto', paddingVertical: 10 }}>
-            <Rating
-              type="star"
-              imageSize={20}
-              onFinishRating={(rating) => setHostRating(rating)}
-              startingValue={0}
-            />
-            </View>
-          </View>
-          <Text style={styles.feedback}>feedback</Text>
-          <View style={styles.row}>
-            <TextInput
-              placeholder="How was the Host?"
-              value={hostMessage}
-              containerStyle={{ flex: 1, height: 50, paddingVertical: 20 }}
-              inputContainerStyle={{ borderBottomWidth: 0 }}
-              onChangeText={(text) => setHostMessage(text)}
-              editable={!feedbackSent.includes('host')}
-              style={{ fontSize: 18, marginHorizontal: 12 }} />
-            {feedbackSent.includes('host') ||
-              <View style={{ marginLeft: 'auto', paddingHorizontal: 5 }}>
-                <Icon
-                  name="send"
-                  type="material"
-                  color={GlobalColors.primary}
-                  size={25}
-                  onPress={() => handleSendFeedback('host', props.host._id, true)}
-                /></View>}
-          </View>
-        </View>
-        <View style={styles.divider}></View>
-        {props.riders?.length > 0 && <Text style={{ color: GlobalColors.primary, fontSize: 25, margin: 8, fontWeight: 'bold' }}>Co-Riders</Text>}
+        {props.riders?.length > 0 && <Text style={{ color: GlobalColors.primary, fontSize: 25, margin: 8, fontWeight: 'bold' }}>Riders</Text>}
         {renderRiders()}
       </View>
     </Overlay >

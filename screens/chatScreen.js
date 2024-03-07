@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Image, Text, TouchableOpacity } from 'react-native';
+import { View, Image, Text, TouchableOpacity, Linking } from 'react-native';
 import { GiftedChat, Day } from 'react-native-gifted-chat';
 import { firestoreDB, firebaseAuth } from '../config/firebase.config';
 import GlobalColors from '../styles/globalColors';
 import MessageBubble from '../components/MessageBubble';
 import styles from '../styles/globalStyles';
-import { collection, addDoc, getDocs, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, getDocs, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Icon } from 'react-native-elements';

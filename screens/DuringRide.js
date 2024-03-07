@@ -1,5 +1,5 @@
-import React, { Component } from 'react';
-import { View, Text, Button, TouchableOpacity, Animated } from 'react-native';
+import React, { Component, useEffect, useState } from 'react';
+import { View, Text, Button, TouchableOpacity, Animated, Linking } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
@@ -7,131 +7,237 @@ import styles from '../styles/globalStyles';
 import { Icon, Overlay, Rating, Avatar, Input } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
 import Feedback from '../components/Feedback';
+import PayNowOverlay from '../components/PayNow';
+import { useNavigation } from '@react-navigation/native';
+import { firestoreDB } from '../config/firebase.config';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection } from 'firebase/firestore';
 
-class DuringRideScreen extends Component {
+const DuringRideScreen = () => {
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [rideDetailsHeight, setRideDetailsHeight] = useState(280);
 
-  state = {
-    initialRegion: {
-      latitude: 31.480864, // Initial latitude (FAST-NUCES Lahore)
-      longitude: 74.303114, // Initial longitude (FAST-NUCES Lahore)
-      latitudeDelta: 0.0102,
-      longitudeDelta: 0.0101,
-    },
-    destination:
-      { latitude: 31.484787, longitude: 74.298013 }, // Jinnah hospital
-    isMapReady: false, // New state to track map 
-    rideDetailsHeight: 250,
+  const initialRegion = {
+    latitude: 31.480864,
+    longitude: 74.303114,
+    latitudeDelta: 0.0102,
+    longitudeDelta: 0.0101,
+  };
+  const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
+  const [fromLocation, setFromLocation] = useState(null);
+  const [toLocation, setToLocation] = useState(null);
+  const [fare, setFare] = useState(null);
+  const destination = { latitude: 31.484787, longitude: 74.298013 };
+  const navigation = useNavigation();
+  const [driverInfo, setDriverInfo] = useState(null);
+  const [coriders, setCoriders] = useState([]);
+  const [driverData, setDriverData] = useState(null);
+  const rideID= 'Ri5o1r474TkoTNC0XUZ6';
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const rideDocRef = doc(collection(firestoreDB, 'ride'), rideID);
+        const unsubscribe = onSnapshot(rideDocRef, async (rideSnapshot) => {
+          try {
+            const rideData = rideSnapshot.data();
+            if (!rideData) {
+              console.error('Ride data is null or undefined.');
+              return;
+            }
+            console.log('Ride data:', rideData); 
+            setFromLocation(rideData.from);
+            setToLocation(rideData.to);
+
+            const currentUserRider = rideData.Riders.find(rider => rider.rider === currentUser._id);
+            if (!currentUserRider) {
+              console.error('Current user rider data not found in ride.');
+              return;
+            }
+            setFare(currentUserRider.fare);
+
+            const driverInfoDocRef = doc(collection(firestoreDB, 'driverInfo'), rideData.Host);
+            const userDocRef = doc(collection(firestoreDB, 'users'), rideData.Host);
+
+            // Fetch user data and driverInfo data concurrently
+            const [driverInfoSnapshot, userSnapshot] = await Promise.all([
+              getDoc(driverInfoDocRef),
+              getDoc(userDocRef)
+            ]);
+
+            const driverInfoData = driverInfoSnapshot.data();
+            const userData = userSnapshot.data();
+
+            if (!driverInfoData || !userData) {
+              console.error('Driver info data or user data is null or undefined.');
+              return;
+            }
+            console.log(userData)
+            // Set the driverInfo state
+            setDriverInfo(driverInfoData);
+            // Set the userData state
+            setDriverData(userData);
+            const coridersData = [];
+            for (const rider of rideData.Riders) {
+              if (rider.rider !== currentUser._id) {
+                const riderDocRef = doc(collection(firestoreDB, 'users'), rider.rider);
+                try {
+                  const riderSnapshot = await getDoc(riderDocRef);
+                  const riderData = riderSnapshot.data();
+                  if (riderData) {
+                    coridersData.push(riderData);
+                  } else {
+                    console.error(`Rider data not found for rider ID: ${rider.rider}`);
+                  }
+                } catch (error) {
+                  console.error('Error fetching rider data:', error);
+                }
+              }
+            }
+            setCoriders(coridersData);
+          } catch (error) {
+            console.error('Error processing ride data:', error);
+          }
+        });
+      } catch (error) {
+        console.error('Error setting up snapshot listener:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const cancelRide = async () => {
+    try {
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
+      await updateDoc(rideRef, { status: 'cancelled' });
+      console.log('Ride status updated successfully to "cancelled"');
+      navigation.navigate('RequestCreation') 
+    } catch (error) {
+      console.error('Error updating ride status:', error);
+    }
   };
 
-  handleMapReady = () => {
-    this.setState({ isMapReady: false });
+  const handleMapReady = () => {
+    setIsMapReady(false);
   };
-  handleGestureEvent = (event) => {
-    const { rideDetailsHeight } = this.state;
+
+  const handleGestureEvent = (event) => {
+    const offsetY = -1 * event.nativeEvent.translationY;
+    const newHeight = rideDetailsHeight + offsetY;
+
     if (event.nativeEvent.state === State.ACTIVE) {
-      const offsetY = -1*event.nativeEvent.translationY;
-      var newHeight = rideDetailsHeight + offsetY;
-      // Ensure the ride details cannot be completely closed or exceed a certain height
-      if (newHeight <= 300){
-        newHeight=300
-      }
-      else if (newHeight >= 700){
-        newHeight=700
-      }
-      if (newHeight >= 250 && newHeight <= 700) {
-        this.setState({ rideDetailsHeight: newHeight });
+      if (newHeight <= 280) {
+        setRideDetailsHeight(280);
+      } else if (newHeight >= 600) {
+        setRideDetailsHeight(600);
+      } else if (newHeight >= 280 && newHeight <= 600) {
+        setRideDetailsHeight(newHeight);
       }
     }
   };
 
-  render() {
-    const { isMapReady } = this.state;
-    const fromLocation = 'Fast Nuces Lahore';
-    const toLocation = 'Jinnah Hospital';
-    const vehicleRegNumber = 'LZT 6505';
-    const driverName = 'Noor Fatimah';
-    const carModel = 'Sedan';
-    const rating = 4.5;
-    const fare = '50.00';
-    const { rideDetailsHeight } = this.state;
-    const dummyNames = ['Ali', 'Sara'];
-    const dummyFare = ['50', '70'];
-    const feedback = 'Excellent service!';
-
-    return (
-      <>
-        <GestureHandlerRootView style={styles.container}>
-          <MapView
-            style={styles.map}
-            initialRegion={this.state.initialRegion}
-            showsUserLocation
-            followsUserLocation
-            onMapReady={this.handleMapReady} // Set the onMapReady callback
-          >
-            <Marker
-              coordinate={{ latitude: 31.480864, longitude: 74.303114 }}
-              title="Your Location"
-              description="This is where you are"
+  return (
+    <>
+      <GestureHandlerRootView style={styles.container}>
+        <MapView
+          style={styles.map}
+          initialRegion={initialRegion}
+          showsUserLocation
+          followsUserLocation
+          onMapReady={handleMapReady} // Set the onMapReady callback
+        >
+          <Marker
+            coordinate={{ latitude: 31.484787, longitude: 74.298013 }}
+            title="Your Location"
+            description="This is where you are"
+          />
+          {isMapReady && ( // Render the directions only when the map is ready
+            <MapViewDirections
+              origin={initialRegion}
+              destination={destination}
+              apikey="YOUR_GOOGLE_MAPS_API_KEY"
+              strokeWidth={4}
+              strokeColor="blue"
             />
-            <Marker
-              coordinate={{ latitude: 31.484787, longitude: 74.298013 }}
-              title="Your Location"
-              description="This is where you are"
-            />
-            {isMapReady && ( // Render the directions only when the map is ready
-              <MapViewDirections
-                origin={this.state.initialRegion}
-                destination={this.state.destination}
-                apikey="YOUR_GOOGLE_MAPS_API_KEY"
-                strokeWidth={4}
-                strokeColor="blue"
-              />
-            )}
-          </MapView>
-          <Feedback names={dummyNames} fare={dummyFare} />
-          <PanGestureHandler onGestureEvent={this.handleGestureEvent}>
-            <Animated.View
-              style={[styles.rideDetails, { height: rideDetailsHeight }]}
-            >
-              <View style={styles.drawerIndicator} />
-              <Text style={styles.locationText}>From: {fromLocation}</Text>
-              <Text style={styles.locationText}>To: {toLocation}</Text>
+          )}
+        </MapView>
 
+        <PayNowOverlay
+          totalAmount = {fare}
+          host={driverData}
+          riders= {coriders} />
+        <PanGestureHandler onGestureEvent={handleGestureEvent}>
+          <Animated.View style={[styles.rideDetails, { height: rideDetailsHeight }]}>
+            <Text style={styles.locationText}>From: {fromLocation}</Text>
+            <Text style={styles.locationText}>To: {toLocation}</Text>
+            
+            {driverInfo && (
               <View style={styles.detailsAndFareContainer}>
-                <Avatar
-                  rounded
-                  size="large"
-                  source={require('../assets/avatar.jpg')} // Replace with your image
-                />
+                {driverData?.profilePic ? (<Avatar rounded size="large" source={{ uri: driverData?.profilePic }} />)
+                  : (
+                    <Avatar rounded size="large" source={require('../assets/avatar.jpg')}
+                    />)}
                 <View style={styles.detailsContainer}>
-                  <Text style={styles.rideInfo}>{driverName}</Text>
-                  <Text style={[styles.rideInfo, { fontSize: 10 }]}>{carModel}</Text>
-                  <Text style={[styles.rideInfo, { fontSize: 15 }]}>{vehicleRegNumber}</Text>
+                  <Text style={styles.rideInfo}>{driverData?.name}</Text>
+                  <Text style={[styles.rideInfo, { fontSize: 10 }]}>{driverInfo.make} {driverInfo.model}</Text>
+                  <Text style={[styles.rideInfo, { fontSize: 15 }]}>{driverInfo.numberPlate}</Text>
                   <View style={styles.ratingContainer}>
                     <Icon name="star" type="font-awesome" size={16} color="gold" />
-                    <Text style={styles.rating}>{rating}</Text>
+                    <Text style={styles.rating}>{driverData?.rating}</Text>
                   </View>
                 </View>
                 <View>
-                  <Text style={[styles.fare, { color: GlobalColors.primary }]}>Rs.{fare}</Text>
-                  <View style={styles.callChatIcons}>
+                <Text style={[styles.fare, { color: GlobalColors.primary }]}>Rs.{fare}</Text>
+                <View style={styles.callChatIcons}>   
+                  <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', { _id: driverInfo._id, name: driverInfo.driverName, profilePic: driverInfo.profilePic }) }}>
                     <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                  </TouchableOpacity>
+                  <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                </View>
+                </View>
+              </View>
+            )}
+            <TouchableOpacity style={styles.cancelButton} onPress={cancelRide}>
+              <Text style={styles.cancelButtonText}>CANCEL RIDE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setRideDetailsHeight(280+70*coriders.length) }}>
+              <Text style={{ color: GlobalColors.primary, fontSize: 25, fontWeight: 'bold' }}>Co-Riders</Text>
+            </TouchableOpacity>
+
+            {coriders.map((corider, index) => (
+              <View key={index} style={styles.detailsAndFareContainer}>
+                {corider?.profilePic ? <Avatar rounded size="large" source={{ uri: corider?.profilePic }} />
+                : (
+                    <Avatar rounded size="large" source={require('../assets/avatar.jpg')}
+                    />)}
+                <View style={styles.detailsContainer}>
+                  <Text style={styles.rideInfo}>{corider.name}</Text>
+                  <Text style={[styles.rideInfo, { fontSize: 10 }]}>{corider.gender === 0 ? 'Male' : 'Female'}</Text>
+                  <View style={styles.ratingContainer}>
+                    <Icon name="star" type="font-awesome" size={16} color="gold" />
+                    <Text style={styles.rating}>{corider.rating}</Text>
+                  </View>
+                </View>
+                <View>
+                  <View style={styles.callChatIcons}>
+                    <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', corider) }}>
+                      <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                    </TouchableOpacity>
+                    { corider.phoneNumber && <TouchableOpacity onPress={() => {Linking.openURL(`tel:${corider.phoneNumber}`)}}>
                     <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                    </TouchableOpacity>}
                   </View>
                 </View>
               </View>
+            ))}
+          </Animated.View>
+        </PanGestureHandler>
+      </GestureHandlerRootView>
 
-              <TouchableOpacity style={styles.cancelButton}>
-                <Text style={styles.cancelButtonText}>Cancel Ride</Text>
-              </TouchableOpacity>
-              
-            </Animated.View>
-          </PanGestureHandler>
-        </GestureHandlerRootView>
-        
-      </>
-    );
-  }
+    </>
+  );
 }
+
 
 export default DuringRideScreen;

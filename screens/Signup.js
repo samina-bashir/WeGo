@@ -53,7 +53,10 @@ const SignUp = () => {
             phoneNumber,
             gender: selectedGenderIndex,
             driver: hasVehicle,
-            status: 'unverified'
+            status: 'unverified',
+            rating: 0,
+            cancellationHost: 0,
+            cancellationRider: 0
           };
           
           try {

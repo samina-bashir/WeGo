@@ -15,6 +15,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { firestoreDB } from '../config/firebase.config';
 import { doc, setDoc } from 'firebase/firestore';
 import { SET_USER } from '../context/actions/userActions';
+import { BASE_URL } from '../config/backend';
 
 const OTPScreen = () => {
   const navigation = useNavigation();
@@ -90,7 +91,7 @@ const OTPScreen = () => {
       const Otp = generateOTP();
       if (user.email) {
         console.log(user.email)
-        const serverURL = 'https://31d2-2400-adc5-140-4300-89df-7c37-8729-4598.ngrok-free.app/send-email';
+        const serverURL = BASE_URL+'email/send-email';
 
         // Make a request to your server to trigger OTP email sending
         const response = await axios.get(
