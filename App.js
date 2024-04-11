@@ -27,6 +27,7 @@ import PayFare from './screens/PayFare.js';
 import FindScheduledHost from './screens/FindScheduledHost.js';
 import FindScheduledRider from './screens/FindScheduledRider.js';
 import EditProfile from './screens/EditProfile.js';
+import SetLocationScreen from './screens/SetLocation.js';
 LogBox.ignoreLogs(['Warning: ...']); // Ignore log notification by message
 LogBox.ignoreAllLogs();
 const Stack = createNativeStackNavigator();
@@ -39,6 +40,8 @@ export default function App() {
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
+            
+          <Stack.Screen name="SetLocation" component={SetLocationScreen} />
             <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="FindScheduledRider" component={FindScheduledRider} />
             <Stack.Screen name="FindScheduledHost" component={FindScheduledHost} />
