@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking } from 'react-native';
-import { collection, query, where, doc, getDocs, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking, ActivityIndicator } from 'react-native';
+import { collection, query, where, doc, getDocs, getDoc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { Avatar, Icon, Input, Switch } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Modal } from 'react-native';
 import Picker from '../components/Picker';
-import CoriderModal from '../components/CoridersModal';
 import { useSelector } from 'react-redux';
-import { ActivityIndicator } from 'react-native';
 
-const FindHostScreen = () => {
-    const [isLoading, setIsLoading] = useState(true);
+const FindScheduledRider = () => {
+    const [isLoading, setIsLoading]= useState(true)
     const [requests, setRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
     const navigation = useNavigation();
@@ -20,18 +18,16 @@ const FindHostScreen = () => {
     const [filters, setFilters] = useState({
         ac: false,
         music: false,
-        coriders: true,
     });
     const [ratingRange, setRatingRange] = useState([0, 5]);
     const [fareRange, setFareRange] = useState([0, 50000]);
     const [gender, setGender] = useState('none');
-    const [coridersVisible, setCoridersVisible] = useState(false);
     const [selectedItem, setItem] = useState(null);
     const [declinedRequests, setDeclinedRequests] = useState([]);
     const [showAcceptModal, setShowAcceptModal] = useState(false);
+    const currentUser = useSelector((state) => state?.user?.user);
     const [selectedRequestId, setSelectedRequestId] = useState(null);
-    const currentUser = useSelector((state) => state.user.user);
-    const myReqData = useRoute().params;
+    const myReqData = useRoute()?.params?.request;
     const response = {
         requestId: myReqData?.id,
         fare: myReqData?.fare,
@@ -39,50 +35,39 @@ const FindHostScreen = () => {
         responseBy: currentUser?._id,
         status: "pending",
         to: myReqData?.to,
+        schedule: myReqData?.schedule,
+        startDate: new Date(myReqData?.startDate),
+        endDate: new Date(myReqData?.endDate),
         seats: myReqData?.seats
-
     };
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
 
     useEffect(() => {
         const fetchRequests = async () => {
-
             setIsLoading(true)
-            const requestsCollection = collection(firestoreDB, 'findRiderRequests');
+            const requestsCollection = collection(firestoreDB, 'findScheduledHostRequests');
             const q = query(requestsCollection);
 
             const querySnapshot = await getDocs(q);
             const requestsData = [];
-            console.log('hi', querySnapshot.docs[0].data())
+
             for (const document of querySnapshot.docs) {
                 const requestData = document.data();
                 const createdBy = requestData.createdBy;
-                console.log('ok', createdBy)
 
                 // Retrieve additional data from 'users' collection
                 const userRef = doc(firestoreDB, 'users', createdBy);
-                console.log('ok2')
                 const userSnapshot = await getDoc(userRef);
-                console.log('ok3')
                 requestData.userData = userSnapshot.exists() ? userSnapshot.data() : {};
-                console.log('id',myReqData);
-                const coriderRef = doc(firestoreDB, 'ride', document.id);
-                try {
-                    
-                    const coriders = await getDoc(coriderRef);
-                    console.log('ok5');
-                
-                requestData.coriders = coriders.exists() ? coriders.data().Riders : [];
-                // Create Firestore document reference
-            } catch (error) {
-                console.error(error);
-            }
                 const email = requestData.userData.email;
-             
-                const domain = email.substring(email?.lastIndexOf("@") + 1);
+                const domain = email.substring(email.lastIndexOf("@") + 1);
+                
+                // Create Firestore document reference
                 const orgRef = doc(firestoreDB, 'organizations', domain);
-
                 // Get the document
-                getDoc(orgRef).then((docSnapshot) => {
+                await getDoc(orgRef).then((docSnapshot) => {
                     if (docSnapshot.exists()) {
                         requestData.userData.orgName = docSnapshot.data().Name;
                         if (requestData.userData.orgName == '') {
@@ -96,22 +81,17 @@ const FindHostScreen = () => {
                 }).catch((error) => {
                     console.error("Error getting organization:", error);
                 });
-                // Retrieve additional data from 'driverInfo' collection (if applicable)
-                if (requestData.userData.driver) {
-                    const driverInfoRef = doc(firestoreDB, 'driverInfo', createdBy);
-                    const driverInfoSnapshot = await getDoc(driverInfoRef);
-                    requestData.driverInfo = driverInfoSnapshot.exists() ? driverInfoSnapshot.data() : {};
-                }
+                console.log(requestData.userData.orgName)
 
                 requestsData.push({
-                    id: document?.id,
+                    id: document.id,
                     ...requestData,
                 });
             }
-            setFilteredRequests(requestsData);
+
             setRequests(requestsData);
-            
-            console.log('rd',requestsData)
+            setFilteredRequests(requestsData);
+            console.log(requestsData)
             applyFilters();
             setIsLoading(false)
         };
@@ -121,20 +101,41 @@ const FindHostScreen = () => {
 
     useEffect(() => {
         applyFilters();
-    }, [filters, gender, ratingRange, fareRange, declinedRequests]);
+    }, [filters, gender, ratingRange, fareRange, declinedRequests, requests]);
+    
+    useEffect(() => {
+        // Real-time listener for response status changes
+        if (selectedRequestId) {
+            const responseRef = doc(firestoreDB, 'responsesHost', selectedRequestId);
+            const unsubscribe = onSnapshot(responseRef, (doc) => {
+                if (doc.exists()) {
+                    const responseData = doc.data();
+                    console.log(responseData)
+                    // Check if myReqData.id exists in responses
+                    const myReqResponse = responseData.responsesHost?.find(response => response.responseBy === currentUser?._id);
+                    console.log(myReqResponse)
+                    if (myReqResponse && myReqResponse.status === 'confirmed') {
+                        setShowAcceptModal(false)
+                        // Status changed to accepted, navigate to "during ride" screen
+                        navigation.navigate('DuringRideHost', { requestId: myReqData.id });
+                    }
+                }
+            });
+
+            return () => unsubscribe();
+        }
+    }, [selectedRequestId]);
 
     const applyFilters = () => {
         const filtered = requests.filter(request => {
             return (
                 (!filters.ac || request.ac) &&
                 (!filters.music || request.music) &&
-                (filters.coriders || request.coriders.length === 0) &&
                 request.userData.rating >= ratingRange[0] && request.userData.rating <= ratingRange[1] &&
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
-                !declinedRequests.includes(request?.id) &&
-                request.createdBy != currentUser._id &&
-                request.status != 'closed'
+                !declinedRequests.includes(request.id) &&
+                request.createdBy !=currentUser._id
             );
         });
         setFilteredRequests(filtered);
@@ -147,16 +148,75 @@ const FindHostScreen = () => {
             [filter]: !prevFilters[filter]
         }));
     };
-
+    const handleAcceptance = async (reqID) => {
+        setSelectedRequestId(reqID)
+       
+        // Add or update response in Firestore
+        
+        try {
+            const responseRef = doc(firestoreDB, 'responsesHost', reqID);
+            const docSnapshot = await getDoc(responseRef);
+            console.log('ok')
+            console.log(response)
+            console.log(myReqData)
+            if (docSnapshot.exists()) {
+                console.log(docSnapshot.data())
+                const responseIndex = docSnapshot.data().responsesHost.findIndex(response => response.responseBy === currentUser?._id);
+                console.log(responseIndex)
+                if (responseIndex == -1) {
+                // Document already exists, update it
+                await updateDoc(responseRef, {
+                    responsesHost: [...docSnapshot.data().responsesHost, response]
+                });
+            }else{
+                const existingData=docSnapshot.data()
+                existingData.responsesHost[responseIndex]=response
+                console.log('d',existingData)
+                await updateDoc(responseRef, 
+                   {responsesHost: existingData.responsesHost}
+                );
+            }
+            } else {
+                // Document doesn't exist, create it with the accepted request ID
+                await setDoc(responseRef, {
+                    responsesHost: [response]
+                });
+            }
+            setShowAcceptModal(true)
+            console.log('Response added/updated successfully!');
+        } catch (error) {
+            console.error('Error adding/updating response:', error);
+        }
+    };
+    const handleCancel = async () => {
+        setShowAcceptModal(false)
+        try {
+            const responseRef = doc(firestoreDB, 'responsesHost', selectedRequestId);
+            const responseData = await getDoc(responseRef);
+            if (responseData.exists()) {
+                
+                const responseIndex = responseData.data().responsesHost.findIndex(response => response.responseBy === currentUser?._id);
+                if (responseIndex !== -1) {
+                    const updatedData = { ...responseData.data() };
+                    updatedData.responsesHost[responseIndex].status = 'cancelled';
+                    await updateDoc(responseRef, updatedData);
+                } else {
+                    console.error('Response not found for the current user.');
+                }
+            }
+            console.log('Response added/updated successfully!');
+        } catch (error) {
+            console.error('Error adding/updating response:', error);
+        }
+    };
     const renderRequestItem = ({ item }) => (
         <View style={styles.card}>
             <View style={styles.profileSection}>
-                {item.userData?.profilePic ? (<Avatar rounded size="large" source={{ uri: item.userData?.profilePic }} />)
+                {item.userData?.profilePic ? (<Avatar rounded size={60} source={{ uri: item.userData?.profilePic }} />)
                     : (
-                        <Avatar rounded size={90} source={require('../assets/avatar.jpg')}
+                        <Avatar rounded size={60} source={require('../assets/avatar.jpg')}
                         />)}
-                <View style={styles.hostDetails}>
-                    <Text style={styles.textBold}>{item.driverInfo?.make} {item.driverInfo?.model}</Text>
+                <View style={styles.riderDetails}>
                     <Text style={styles.text}>{item.userData.name}</Text>
                     <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
                     <View style={{ flexDirection: 'row' }}>
@@ -167,19 +227,8 @@ const FindHostScreen = () => {
                 </View>
 
                 <View style={{ paddingRight: 10 }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>
-                    
-                    <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
-                        <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
-                            Coriders
-                        </Text>
-                    </TouchableOpacity>
-                    <CoriderModal
-                        visible={coridersVisible}
-                        coriders={selectedItem?.coriders}
-                        onClose={() => setCoridersVisible(false)}
-                    />
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>  
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>        
                     <View style={styles.callChatIcons}>
                         <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
                             <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
@@ -189,7 +238,13 @@ const FindHostScreen = () => {
                         </TouchableOpacity>}
                     </View>
                 </View>
+               
             </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' , marginLeft:'auto', paddingRight:10}}>
+                        <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
+                        <Text style={{ fontWeight: 'bold', fontSize: 14 }}> - </Text>
+                        <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
+                    </View>
             <View style={{ flexDirection: 'row' }}>
                 <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
                 <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginLeft: 'auto' }}>
@@ -213,8 +268,6 @@ const FindHostScreen = () => {
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
                     setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
-                    console.log(item)
-                    console.log(item.id)
                 }}>
                     <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
                 </TouchableOpacity>
@@ -223,99 +276,10 @@ const FindHostScreen = () => {
 
         </View>
     );
-    useEffect(() => {
-        // Real-time listener for response status changes
-        if (selectedRequestId) {
-            const responseRef = doc(firestoreDB, 'responses', selectedRequestId);
-            const unsubscribe = onSnapshot(responseRef, (doc) => {
-                if (doc.exists()) {
-                    const responseData = doc.data();
-
-                    // Check if myReqData.id exists in responses
-                    const myReqResponse = responseData.responses.find(response => response.responseBy === currentUser._id);
-
-                    if (myReqResponse && myReqResponse.status === 'confirmed') {
-                        setShowAcceptModal(false)
-                        // Status changed to accepted, navigate to "during ride" screen
-                        navigation.navigate('DuringRide', { requestId: selectedRequestId });
-                    }
-                }
-            });
-
-            return () => unsubscribe();
-        }
-    }, [selectedRequestId]);
-    const handleAcceptance = async (reqID) => {
-        setSelectedRequestId(reqID)
-
-        // Add or update response in Firestore
-
-        try {
-            const responseRef = doc(firestoreDB, 'responses', reqID);
-            const docSnapshot = await getDoc(responseRef);
-            console.log('ok')
-            console.log(response)
-            console.log(myReqData)
-            if (docSnapshot.exists()) {
-                console.log(docSnapshot.data())
-                const responseIndex = docSnapshot.data().responses.findIndex(response => response.responseBy === currentUser?._id);
-                console.log(responseIndex)
-                if (responseIndex == -1) {
-                    // Document already exists, update it
-                    await updateDoc(responseRef, {
-                        responses: [...docSnapshot.data().responses, response]
-                    });
-                } else {
-                    const existingData = docSnapshot.data()
-                    existingData.responses[responseIndex] = response
-                    console.log('d', existingData)
-                    await updateDoc(responseRef,
-                        { responses: existingData.responses }
-                    );
-                }
-            } else {
-                // Document doesn't exist, create it with the accepted request ID
-                await setDoc(responseRef, {
-                    responses: [response]
-                });
-            }
-            console.log('Response added/updated successfully!');
-            setShowAcceptModal(true)
-        } catch (error) {
-            console.error('Error adding/updating response:', error);
-        }
-    };
-
-    const handleCancel = async () => {
-        setShowAcceptModal(false)
-        try {
-
-            if (selectedRequestId) {
-                const responseRef = doc(firestoreDB, 'responses', selectedRequestId);
-                const responseData = await getDoc(responseRef);
-                if (responseData.exists()) {
-                    const responseIndex = responseData.data().responses.findIndex(response => response.responseBy === currentUser._id);
-                    if (responseIndex !== -1) {
-                        const updatedData = { ...responseData.data() };
-                        updatedData.responses[responseIndex].status = 'cancelled';
-                        await updateDoc(responseRef, updatedData);
-                    } else {
-                        console.error('Response not found for the current user.');
-                    }
-                }
-                else { console.error('Response not found.') }
-                console.log('Response canceled successfully!');
-            }
-            else { console.log('No selected Id') }
-        } catch (error) {
-            console.error('Error canceling response:', error);
-        }
-    };
-
 
     return (
         <View style={styles.container}>
-            <Text style={styles.heading}>Available Hosts</Text>
+            <Text style={styles.heading}>Available Riders</Text>
             <View style={styles.filterContainer}>
                 <TouchableOpacity style={styles.filterButton} onPress={() => setFilterModalVisible(true)}>
                     <Icon name="filter" type="font-awesome-5" color={GlobalColors.primary} size={20} />
@@ -324,8 +288,9 @@ const FindHostScreen = () => {
 
             </View>
             {isLoading && (
-                <ActivityIndicator size={"large"} color={GlobalColors.primary} />
-            )}
+          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+        )}
+        {console.log(isLoading)}
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
@@ -339,12 +304,13 @@ const FindHostScreen = () => {
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalText}>Waiting for confirmation...</Text>
-                        <TouchableOpacity style={[styles.button, { flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
-                            <Text style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
+                        <TouchableOpacity style={[styles.button, {flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
+                            <Text  style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
+
             <Modal
                 visible={filterModalVisible}
                 animationType="slide"
@@ -379,17 +345,7 @@ const FindHostScreen = () => {
                                 style={{ marginLeft: 'auto' }}
                             />
                         </View>
-                        <View style={styles.filterItem}>
-                            <Text style={styles.filterText}>Coriders</Text>
-                            <Switch
-                                trackColor={{ false: '#767577', true: GlobalColors.primary }}
-                                thumbColor={filters.coriders ? GlobalColors.background : '#f4f3f4'}
-                                ios_backgroundColor="#3e3e3e"
-                                onValueChange={() => toggleFilter('coriders')}
-                                value={filters.coriders}
-                                style={{ marginLeft: 'auto' }}
-                            />
-                        </View>
+                        
                         <View style={styles.filterItem}>
                             <Text style={styles.filterText}>Rating</Text>
                             <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
@@ -429,7 +385,6 @@ const FindHostScreen = () => {
                                     suppressUndefinedOrNullWarning={true}
                                 />
                             </View>
-                            {console.log(ratingRange)}
                         </View>
                         <View style={styles.filterItem}>
                             <Text style={styles.filterText}>Gender</Text>
@@ -487,6 +442,7 @@ const FindHostScreen = () => {
                                 />
                             </View>
                         </View>
+
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
@@ -525,12 +481,6 @@ const styles = StyleSheet.create({
         marginBottom: 5,
         marginHorizontal: 10
     },
-    modalText: {
-        fontSize: 18,
-        marginVertical: 20,
-        textAlign: 'center',
-        paddingHorizontal: 20
-    },
     profileSection: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -549,7 +499,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginHorizontal: 2,
     },
-    hostDetails: {
+    riderDetails: {
         flex: 1,
     },
     textBold: {
@@ -589,6 +539,12 @@ const styles = StyleSheet.create({
         padding: 20,
         width: '80%',
     },
+    modalText: {
+        fontSize: 18,
+        marginVertical: 20,
+        textAlign: 'center',
+        paddingHorizontal: 20
+    },
     closeButton: {
         alignSelf: 'flex-end',
     },
@@ -623,4 +579,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default FindHostScreen;
+export default FindScheduledRider;

@@ -13,22 +13,36 @@ import { useSelector } from 'react-redux';
 export default function Feedback(props) {
   const [hostMessage, setHostMessage] = useState('');
   const [hostRating, setHostRating] = useState(0);
-  const [riderRating, setRiderRating] = useState(Array(props.riders.length).fill(0));
-  const [riderFeedbacks, setRiderFeedbacks] = useState(Array(props.riders.length).fill(''));
-  const isOverlayVisible = props?.visible;
+  const [riderRating, setRiderRating] = useState(Array(props.riders?.length).fill(0));
+  const [riderFeedbacks, setRiderFeedbacks] = useState(Array(props.riders?.length).fill(''));
+  const [isOverlayVisible, setOverlayVisible] = useState(true);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
-  const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
 
   useEffect(() => {
-    if (feedbackSent.length === props.riders.length + 1) {
+    console.log(props.riders?.length)
+    console.log(feedbackSent?.length)
+    if (feedbackSent?.length > props.riders?.length && props.riders.length != 0) {
       // Close overlay when all feedbacks are sent
       handleCloseOverlay();
     }
   }, [feedbackSent]);
 
-  const handleCloseOverlay = () => {
+  const handleCloseOverlay = async() => {
     setOverlayVisible(false);
+    const rideRef = doc(collection(firestoreDB, 'ride'), props.rideID);
+    const rideSnapshot = await getDoc(rideRef);
+    const rideData = rideSnapshot.data();
+    const currentUserIndex = rideData.Riders.findIndex(rider => rider.rider === currentUser._id);
+
+    if (currentUserIndex !== -1) {
+        const updatedRiders = [...rideData.Riders];
+        updatedRiders[currentUserIndex].status = "completed"; 
+        await updateDoc(rideRef, { Riders: updatedRiders });
+    } else {
+        console.error("Current user is not a rider in this ride.");
+    }
     navigation.navigate('RequestCreation');
   };
 
@@ -58,7 +72,7 @@ export default function Feedback(props) {
   };
 
   const renderRiders = () => {
-    return props.riders.map((rider, index) => (
+    return props.riders?.map((rider, index) => (
       <View key={index}>
         <View style={styles.row}>
           <Text style={styles.name}>{rider.name}</Text>
@@ -124,6 +138,35 @@ export default function Feedback(props) {
           feedbacks: [data]
         });
       }
+
+      const userRef = doc(firestoreDB, 'users', id);
+
+      // Fetch the current user data
+      const userSnapshot = await getDoc(userRef);
+      if (!userSnapshot.exists()) {
+        console.log('User does not exist.');
+        return;
+      }
+
+      const userData = userSnapshot.data();
+
+      // Calculate new rating
+      const newRatingCount = userData.ratingCount + 1;
+      const newRatingSum = userData.ratingSum + data.rating;
+      const newRating = newRatingSum / newRatingCount;
+
+      try {
+        // Update the user document
+        await updateDoc(userRef, {
+          ratingCount: newRatingCount,
+          ratingSum: newRatingSum,
+          rating: newRating
+        });
+
+        console.log('User data updated successfully.');
+      } catch (error) {
+        console.error('Error updating user data:', error);
+      }
       console.log('Feedback saved successfully.');
     } catch (error) {
       console.error('Error saving feedback: ', error);
@@ -133,7 +176,7 @@ export default function Feedback(props) {
 
   return (
     <Overlay
-      isVisible={props.visible && isOverlayVisible}
+      isVisible={isOverlayVisible}
       overlayStyle={[styles.overlay, { height: overlayHeight }]}
     >
       <View style={styles.column}>

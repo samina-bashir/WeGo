@@ -17,6 +17,7 @@ const SignIn = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const navigation = useNavigation();
   const dispatch = useDispatch()
+
   const handleSignIn = async () => {
     try {
       const userCredentials = await signInWithEmailAndPassword(firebaseAuth, email, password);
@@ -32,6 +33,7 @@ const SignIn = () => {
             if(docSnap.data().status==='unverified'){
               navigation.replace('OTP')
             }else{
+              console.log('going')
               navigation.replace("RequestCreation");
             }
           }
@@ -88,10 +90,7 @@ const SignIn = () => {
       )}
     </View>
   );
-  const handleSignInWithGoogle = () => {
-    // Implement Google Sign-In logic here
-    console.log('Signing in with Google...');
-  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>SignIn</Text>
@@ -108,13 +107,7 @@ const SignIn = () => {
           Don't have an Account?{' '}
           <Text style={styles.loginLink}>Create Now</Text>
         </Text></TouchableOpacity>
-      <Text style={{ fontStyle: 'italic', alignSelf: 'center' }}>OR</Text>
-      <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.secondary }]} onPress={handleSignInWithGoogle}>
-        <View style={styles.googleButtonContent}>
-          <Icon name="google" type="font-awesome" color="#fff" size={24} style={{ marginHorizontal: 10 }} />
-          <Text style={styles.buttonText}>Sign In with Google</Text>
-        </View>
-      </TouchableOpacity>
+
     </View>
   );
 };

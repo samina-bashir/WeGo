@@ -17,18 +17,37 @@ const SplashScreen = () => {
     const dispatch = useDispatch()
     const checkLoggedUser = async () => {
         firebaseAuth.onAuthStateChanged((userCred) => {
-            if (0==1) {
+            if (userCred?.uid) {
                 try {
                     getDoc(doc(firestoreDB, "users", userCred?.uid)).then((docSnap) => {
                         if (docSnap.exists()) {
                             console.log(docSnap.data());
                             dispatch(SET_USER(docSnap.data()))
+                            const email = docSnap.data().email;
+                            const domain = email.substring(email.lastIndexOf("@") + 1);
+                            const orgRef = doc(firestoreDB, 'organizations', domain);
+            
+                            // Get the document
+                            getDoc(orgRef).then((docSnapshot) => {
+                                if (docSnapshot.exists()) {
+                                    docSnap.data().orgName = docSnapshot.data().Name;
+                                    if ( docSnapshot.data().status=='rejected') {
+                                        navigation.replace('Suspended Domain')
+                                    }
+                                }
+                            }).catch((error) => {
+                                console.error("Error getting organization:", error);
+                            });
                             console.log(docSnap.data().status)
                             setTimeout(() => {
-                                if (docSnap.data().status == 'unverified') {
+                                console.log('ok')
+                                if (docSnap.data().status == 'Unverified') {
                                     navigation.replace('OTP')
-                                } else if (docSnap.data().status == 'verified') {
-                                    navigation.replace("DuringRideHost")
+                                } else if (docSnap.data().fareDue) {
+                                    navigation.replace('PayFare')
+                                } else if (docSnap.data().status == 'Verified') {
+                                    console.log('ok2')
+                                    navigation.replace("RequestCreation")
                                 }
                             }, 1000)
                         }
@@ -39,7 +58,8 @@ const SplashScreen = () => {
                 }
             } else {
                 setTimeout(() => {
-                    navigation.replace('DuringRideHost')
+                    console.log('ok4')
+                    navigation.replace('Signin')
                 }, 1000)
             }
         })

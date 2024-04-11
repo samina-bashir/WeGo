@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Modal, FlatList } from 'react-native';
 import GlobalColors from '../styles/globalColors';
 import { Icon } from 'react-native-elements';
 
-const Picker = ({ options, selectedValue, onValueChange, placeholder }) => {
+const Picker = ({ options, selectedValue, onValueChange, placeholder, margin }) => {
     const [modalVisible, setModalVisible] = useState(false);
 
     const handlePress = () => {
@@ -17,19 +17,22 @@ const Picker = ({ options, selectedValue, onValueChange, placeholder }) => {
 
     const renderItem = ({ item }) => (
         <TouchableOpacity style={styles.item} onPress={() => handleItemPress(item.value)}>
-            <Icon name={item.icon} type='font-awesome-5' color={GlobalColors.primary}/>
-            <Text style={{textAlign:'center'}}>{item.label}</Text>
+            <Icon name={item.icon} type='font-awesome-5' color={GlobalColors.primary} />
+            <Text style={{ textAlign: 'center' }}>{item.label}</Text>
         </TouchableOpacity>
     );
 
     return (
-        <View>
+        <View >
             <TouchableOpacity onPress={handlePress} style={styles.input}>
                 <Text>{selectedValue ? selectedValue : placeholder}</Text>
             </TouchableOpacity>
-            <Modal visible={modalVisible} transparent animationType="slide">
+            <Modal visible={modalVisible} transparent animationType="slide" >
                 <View style={styles.modalContainer}>
                     <FlatList
+                        style={{flex:1 , marginVertical:  margin? margin :'7%'}}
+                        containerStyle={{flex:1}}
+                        contentContainerStyle={{ justifySelf: 'center', alignSelf: 'center', backgroundColor: GlobalColors.background, padding: 40 , borderWidth: 1, borderColor: GlobalColors.primary}}
                         data={options}
                         renderItem={renderItem}
                         keyExtractor={(item) => item.value.toString()}
@@ -47,21 +50,22 @@ const styles = {
         borderColor: GlobalColors.primary,
         paddingHorizontal: 20,
         marginVertical: 7,
-        width: '100%',
+        width: 'auto',
         height: 40,
-        justifyContent:'center'
+        justifyContent: 'center'
     },
     modalContainer: {
-        marginVertical:'40%',
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: GlobalColors.background,
+        width: 'auto',
+        justifySelf: 'center', alignSelf: 'center'
     },
     item: {
-        padding: 15,
+        paddingVertical: 15,
+        paddingHorizontal: 25,
         borderBottomWidth: 1,
         borderBottomColor: GlobalColors.secondary,
-        color:GlobalColors.text,
+        color: GlobalColors.text,
     },
     closeButton: {
         marginTop: 10,

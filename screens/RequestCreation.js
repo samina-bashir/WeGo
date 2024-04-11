@@ -15,6 +15,11 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { Timestamp, addDoc, collection, doc, getDoc } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
+import { Modal } from 'react-native';
+import SetSchedule from './SetSchedule';
+import Menu from '../components/Menu';
+import MyRequests from './MyRequests';
+import { useSelector } from 'react-redux';
 
 const windowWidth = Dimensions.get('window').width;
 const windowHeight = Dimensions.get('window').height;
@@ -33,14 +38,31 @@ const RequestCreationScreen = () => {
     const [to, setTo] = useState(null);
     const [from, setFrom] = useState(null);
     const [route, setRoute] = useState(null);
+    const [showSchedule, setShowSchedule] = useState(false);
     const navigation = useNavigation();
     const [fromError, setFromError] = useState('');
     const [toError, setToError] = useState('');
     const [fareError, setFareError] = useState('');
     const [seatsError, setSeatsError] = useState('');
     const [vehicleError, setVehicleError] = useState('');
+    const [isDropDownVisible, setIsDropDownVisible] = useState(false);
+    const [selectedSchedule, setSelectedSchedule] = useState('Now');
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
+    const [roundTrip, setRoundTrip] = useState(true);
+    const [isMenuVisible, setMenuVisible] = useState(false);
+    const [rawSchedule, setRawSchedule] = useState(
+        Array(7).fill({
+            Earliest: '08:00', // Default earliest pickup time at 8:00 AM
+            Other: '10:00',    // Default other pickup time at 12:00 PM
+            Return: '16:00',   // Default return pickup time at 4:00 PM
+            'Return Dropoff': '18:00', // Default return dropoff time at 8:00 PM
+            enabled: true
+        })
+    );
+    const [schedule, setSchedule] = useState(null);
 
-    const currentUser = { _id: "FZxbp2UoJxThVSBIjIIbGEA3Z202" }//useSelector((state) => state.user.user);
+    const currentUser = useSelector((state) => state.user.user);
 
     useEffect(() => {
         (async () => {
@@ -71,7 +93,7 @@ const RequestCreationScreen = () => {
                 let response = await fetch(apiUrl);
                 let result = await response.json();
 
-                if (result.routes && result.routes.length > 0) {
+                if (result.routes && result.routes?.length > 0) {
                     const polyline = result.routes[0].overview_polyline.points;
                     setRoute(polyline);
                 }
@@ -192,7 +214,7 @@ const RequestCreationScreen = () => {
         const isValidFare = validateFare();
         const isValidSeats = validateSeats();
         const isValidVehicle = validateVehicleSelection();
-
+        console.log(isValidFrom && isValidTo && isValidFare && isValidSeats && isValidVehicle)
         return isValidFrom && isValidTo && isValidFare && isValidSeats && isValidVehicle;
     };
 
@@ -231,7 +253,7 @@ const RequestCreationScreen = () => {
             from: from,
             to: to,
             seats: seats,
-            fare: fare,
+            fare:  parseInt(fare, 10),
             music: music,
             gender: gender,
             ac: ac,
@@ -241,162 +263,249 @@ const RequestCreationScreen = () => {
             requestData.vehicleType = selectedVehicle;
         }
         try {
-            const collectionName = hasVehicle ? 'findRiderRequests' : 'findHostRequests';
+            var collectionName = hasVehicle ? 'findRiderRequests' : 'findHostRequests';
+            if (schedule) {
+                collectionName = hasVehicle ? 'findScheduledRiderRequests' : 'findScheduledHostRequests';
+                requestData.schedule = schedule;
+                requestData.startDate = startDate;
+                requestData.endDate = endDate;
+            }
             const docRef = await addDoc(collection(firestoreDB, collectionName), requestData);
             console.log('Request added with ID: ', docRef.id);
-            return docRef.id;
+            requestData.id=docRef.id
+            console.log(requestData)
+            return requestData;
         } catch (error) {
             console.error('Error adding request: ', error);
 
         }
     };
-    
+    const handleScheduleSet = (receivedSchedule, receivedStartDate, receivedEndDate, roundTrip) => {
+        const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+        const filteredSchedule = receivedSchedule.reduce((acc, daySchedule, index) => {
+            const dayOfWeek = daysOfWeek[index];
+            if (daySchedule.enabled) {
+                acc[dayOfWeek] = {
+                    Earliest: daySchedule.Earliest,
+                    Other: daySchedule.Other,
+                    Return: roundTrip ? daySchedule.Return : null,
+                    'Return Dropoff': roundTrip ? daySchedule['Return Dropoff'] : null,
+                    enabled: true
+                };
+            }
+            return acc;
+        }, {});
+        setRoundTrip(roundTrip);
+        setRawSchedule(receivedSchedule);
+        setSchedule(filteredSchedule);
+        setStartDate(receivedStartDate);
+        setEndDate(receivedEndDate);
+        setShowSchedule(false);
+        setIsDropDownVisible(false)
+        setSelectedSchedule('Prescheduled')
+        console.log(filteredSchedule)
+    };
+    const onClose = () => {
+        setShowSchedule(false);
+        setIsDropDownVisible(false)
+    }
     return (
-        <View style={styles.container}>
-            <MapView
-                style={styles.map}
-                initialRegion={{
-                    latitude: location?.latitude,
-                    longitude: location?.longitude,
-                    latitudeDelta: 0.0925,
-                    longitudeDelta: 0.0424,
-                }}
-            >
-                <Marker
-                    coordinate={{ latitude: 31.484787, longitude: 74.298013 }}
-                    title="Your Location"
-                    description="This is where you are"
-                />
-            </MapView>
-            <TouchableOpacity onPress={() => navigation.navigate('Menu')} style={{ padding: 10, backgroundColor: GlobalColors.background, position: 'absolute', top: 20, left: 20 }}>
-                <Icon type='font-awesome-5' name='bars' color={GlobalColors.primary} />
-            </TouchableOpacity>
-
-            <View style={styles.formContainer}>
-                <ScrollView>
-                    <View style={styles.checkBoxContainer}>
-                        <Checkbox
-                            value={hasVehicle}
-                            onValueChange={handleUserTypeChange}
-                            color={GlobalColors.primary}
-                        />
-                        <Text style={styles.checkBoxLabel}>Offering your vehicle?</Text>
-                    </View>
-                    <View style={styles.vehiclesContainer}>
-                        {vehicles.map((vehicle) => (
-                            <VehicleIcon key={vehicle.id} id={vehicle.id} name={vehicle.icon} onPress={() => showInfo(vehicle.id)} />
-                        ))}
-                        <Overlay isVisible={vehicleInfo !== null} onBackdropPress={hideInfo} overlayStyle={{ margin: 10 }}>
-                            {vehicleInfo && (
-                                <View style={{ padding: 20 }}>
-                                    <Icon name={vehicles.find((v) => v.id === vehicleInfo).icon} type='font-awesome-5' color={GlobalColors.primary} />
-                                    <Text style={styles.heading}>{vehicles.find((v) => v.id === vehicleInfo).name}</Text>
-                                    <Text style={styles.text}>{vehicles.find((v) => v.id === vehicleInfo).details}</Text>
+        <>
+            {showSchedule && 
+                (
+                <View style={{height: windowHeight, marginTop: 25}}>
+                <SetSchedule
+                    roundTripProp={roundTrip}
+                    scheduleProp={rawSchedule}
+                    startDateProp={startDate}
+                    endDateProp={endDate}
+                    onScheduleSet={handleScheduleSet}
+                    onClose={onClose}
+                /></View>)}
+            
+                    <View style={styles.container}>
+                        <MapView
+                            style={styles.map}
+                            initialRegion={{
+                                latitude: location?.latitude,
+                                longitude: location?.longitude,
+                                latitudeDelta: 0.0925,
+                                longitudeDelta: 0.0424,
+                            }}
+                        >
+                            <Marker
+                                coordinate={{ latitude: 31.484787, longitude: 74.298013 }}
+                                title="Your Location"
+                                description="This is where you are"
+                            />
+                        </MapView>
+                        <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 10, position: 'absolute', top: 30, left: 10 }}>
+                            <Icon type='font-awesome-5' name='bars' color={GlobalColors.primary} />
+                        </TouchableOpacity>
+                        {isMenuVisible && <Menu setMenuVisible={setMenuVisible}/>}
+                        <View style={styles.formContainer}>
+                            <ScrollView>
+                                <View style={styles.checkBoxContainer}>
+                                    <Checkbox
+                                        value={hasVehicle}
+                                        onValueChange={handleUserTypeChange}
+                                        color={GlobalColors.primary}
+                                    />
+                                    <Text style={styles.checkBoxLabel}>Offering your vehicle?</Text>
                                 </View>
-                            )}
-                        </Overlay>
-                    </View>
-                    {vehicleError ? <Text style={{ color: 'red', fontSize: 12 }}>{vehicleError}</Text> : null}
+                                <View style={styles.vehiclesContainer}>
+                                    {vehicles.map((vehicle) => (
+                                        <VehicleIcon key={vehicle.id} id={vehicle.id} name={vehicle.icon} onPress={() => showInfo(vehicle.id)} />
+                                    ))}
+                                    <Overlay isVisible={vehicleInfo !== null} onBackdropPress={hideInfo} overlayStyle={{ margin: 10 }}>
+                                        {vehicleInfo && (
+                                            <View style={{ padding: 20 }}>
+                                                <Icon name={vehicles.find((v) => v.id === vehicleInfo).icon} type='font-awesome-5' color={GlobalColors.primary} />
+                                                <Text style={styles.heading}>{vehicles.find((v) => v.id === vehicleInfo).name}</Text>
+                                                <Text style={styles.text}>{vehicles.find((v) => v.id === vehicleInfo).details}</Text>
+                                            </View>
+                                        )}
+                                    </Overlay>
+                                </View>
+                                {vehicleError ? <Text style={{ color: 'red', fontSize: 12 }}>{vehicleError}</Text> : null}
 
-                    <View style={styles.inputContainer}>
-                        <Icon name='map-marker' type='font-awesome' color={GlobalColors.primary} />
-                        <Input
-                            placeholder=" From"
-                            inputContainerStyle={{ borderBottomWidth: 0 }}
-                            onChangeText={setFrom}
-                            containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
-                            inputStyle={styles.input}
-                        />
-                    </View>
-                    {fromError ? <Text style={{ color: 'red', fontSize: 12 }}>{fromError}</Text> : null}
+                                <View style={styles.inputContainer}>
+                                    <Icon name='map-marker' type='font-awesome' color={GlobalColors.primary} />
+                                    <Input
+                                        placeholder=" From"
+                                        inputContainerStyle={{ borderBottomWidth: 0 }}
+                                        onChangeText={setFrom}
+                                        containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
+                                        inputStyle={styles.input}
+                                    />
+                                </View>
+                                {fromError ? <Text style={{ color: 'red', fontSize: 12 }}>{fromError}</Text> : null}
 
-                    <View style={styles.inputContainer}>
-                        <Icon name='search-location' type='font-awesome-5' color={GlobalColors.primary} />
-                        <Input
-                            placeholder="Where to?"
-                            inputContainerStyle={{ borderBottomWidth: 0 }}
-                            containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
-                            inputStyle={styles.input}
-                            onChangeText={setTo}
+                                <View style={styles.inputContainer}>
+                                    <Icon name='search-location' type='font-awesome-5' color={GlobalColors.primary} />
+                                    <Input
+                                        placeholder="Where to?"
+                                        inputContainerStyle={{ borderBottomWidth: 0 }}
+                                        containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
+                                        inputStyle={styles.input}
+                                        onChangeText={setTo}
 
-                        />
-                        <Icon name='clock-o' type='font-awesome' color={GlobalColors.primary} />
-                    </View>
-                    {toError ? <Text style={{ color: 'red', fontSize: 12 }}>{toError}</Text> : null}
+                                    />
+                                    <TouchableOpacity onPress={() => setIsDropDownVisible(true)} style={{ flexDirection: 'row', borderWidth: 1, borderColor: GlobalColors.primary, borderRadius: 20, justifyContent: 'center', alignItems: 'center', padding: 5 }}>
+                                        <Icon name='clock-o' type='font-awesome' color={GlobalColors.primary} />
+                                        <Text style={{ marginHorizontal: 5 }}>{selectedSchedule}</Text>
+                                        <Icon name='angle-down' type='font-awesome' color={GlobalColors.primary} />
+                                    </TouchableOpacity>
+                                    <Modal
+                                        visible={isDropDownVisible}
+                                        transparent={true}
+                                        animationType='slide'
+                                    >
+                                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                                            <View style={{ backgroundColor: 'white', borderRadius: 10, padding: 20, minWidth: 200 }}>
+                                                <TouchableOpacity style={{ margin: 15 }} onPress={() => {  setIsDropDownVisible(false); setSelectedSchedule('Now'); setSchedule(null) }}>
+                                                    <Icon name='clock' type='font-awesome-5' color={GlobalColors.primary} />
+                                                    <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Now</Text>
+                                                </TouchableOpacity>
+                                                <View style={{ backgroundColor: GlobalColors.primary, maxHeight: 2, flex: 1 }} />
+                                                <TouchableOpacity style={{ margin: 15 }} onPress={() => {setIsDropDownVisible(false); setShowSchedule(true)}}>
+                                                    <Icon name='history' type='font-awesome' color={GlobalColors.primary} />
+                                                    <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Prescheduled</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </Modal>
+                                </View>
 
-                    <View style={[styles.inputContainer, { justifyContent: 'space-between' }]}>
-                        <Icon name='users' type='font-awesome-5' color={GlobalColors.primary} />
-                        <Text style={[styles.label, { marginRight: 'auto', paddingHorizontal: 15 }]}>Seats of Vehicle</Text>
-                        <View style={{ flexDirection: 'row', padding: 5 }}>
-                            <Text style={styles.seatCount}>{seats}</Text>
-                            <View style={styles.column}>
-                                <TouchableOpacity onPress={() => setSeats(seats + 1)}>
-                                    <Icon name="caret-up" type="font-awesome" color={GlobalColors.primary} size={20} />
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => setSeats(Math.max(1, seats - 1))}>
-                                    <Icon name="caret-down" type="font-awesome" color={GlobalColors.primary} size={20} />
-                                </TouchableOpacity>
-                            </View>
+                                {toError ? <Text style={{ color: 'red', fontSize: 12 }}>{toError}</Text> : null}
+
+                                <View style={[styles.inputContainer, { justifyContent: 'space-between' }]}>
+                                    <Icon name='users' type='font-awesome-5' color={GlobalColors.primary} />
+                                    <Text style={[styles.label, { marginRight: 'auto', paddingHorizontal: 15 }]}>Seats of Vehicle</Text>
+                                    <View style={{ flexDirection: 'row', padding: 5 }}>
+                                        <Text style={styles.seatCount}>{seats}</Text>
+                                        <View style={styles.column}>
+                                            <TouchableOpacity onPress={() => setSeats(seats + 1)}>
+                                                <Icon name="caret-up" type="font-awesome" color={GlobalColors.primary} size={20} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={() => setSeats(Math.max(1, seats - 1))}>
+                                                <Icon name="caret-down" type="font-awesome" color={GlobalColors.primary} size={20} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </View>
+                                {seatsError ? <Text style={{ color: 'red', fontSize: 12 }}>{seatsError}</Text> : null}
+                                <View style={styles.inputContainer}>
+                                    <Icon name="money-bill-wave" type="font-awesome-5" color={GlobalColors.primary} />
+                                    <Input
+                                        placeholder="Offer your Fare"
+                                        inputContainerStyle={{ borderBottomWidth: 0 }}
+                                        containerStyle={{ flex: 1, height: 50, paddingTop: 5 }}
+                                        inputStyle={styles.input}
+                                        keyboardType="numeric"
+                                        onChangeText={setFare}
+                                    />
+                                </View>
+                                {fareError ? <Text style={{ color: 'red', fontSize: 12 }}>{fareError}</Text> : null}
+                                <Text style={[styles.label, styles.preferableRequirements]}>Preferable Requirements</Text>
+                                <View style={[styles.container, { flexDirection: 'row', justifyContent: 'space-between' }]}>
+                                    <View style={styles.checkBoxContainer}>
+                                        <Checkbox value={ac} onValueChange={setAC} color={GlobalColors.primary} />
+                                        <Text style={[styles.label, { paddingHorizontal: 10 }]}>AC</Text>
+                                    </View>
+                                    <View style={styles.checkBoxContainer}>
+                                        <Checkbox value={gender} onValueChange={setGender} color={GlobalColors.primary} />
+                                        <Text style={[styles.label, { paddingHorizontal: 10 }]}>Same Gender</Text>
+                                    </View>
+                                    <View style={styles.checkBoxContainer}>
+                                        <Checkbox value={music} onValueChange={setMusic} color={GlobalColors.primary} />
+                                        <Text style={[styles.label, { paddingHorizontal: 10 }]}>Music</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.buttonContainer}>
+                                    <TouchableOpacity
+                                        style={[styles.button, { backgroundColor: hasVehicle ? GlobalColors.secondary : GlobalColors.primary }]}
+                                        onPress={async () => {
+                                            if (validateInputs()) {
+                                                const MyRequest=await saveRequest();
+                                                if(!schedule){
+                                                navigation.navigate('FindHost',MyRequest);
+                                                }else{
+                                                    const serializedRequest = { ...MyRequest, startDate: MyRequest.startDate.toISOString(), endDate: MyRequest.endDate.toISOString() };
+                                                    navigation.navigate('FindScheduledHost', serializedRequest)
+                                                }
+                                            
+                                            }
+                                        }}
+                                        disabled={hasVehicle}
+                                    >
+                                        <Text style={styles.buttonText}>Find a Host</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.button, { backgroundColor: hasVehicle ? GlobalColors.primary : GlobalColors.secondary }]}
+                                        onPress={async () => {
+                                            if (validateInputs()) {
+                                                const MyRequest=await saveRequest();
+                                                if(!schedule) {
+                                                navigation.navigate('FindRider',MyRequest);
+                                                }else{
+                                                    const serializedRequest = { ...MyRequest, startDate: MyRequest.startDate.toISOString(), endDate: MyRequest.endDate.toISOString() };
+                                                    navigation.navigate('FindScheduledRider',{ request: serializedRequest })
+                                                }
+                                            }
+                                        }}
+                                        disabled={!hasVehicle}
+                                    >
+                                        <Text style={styles.buttonText}>Find a Rider</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </ScrollView>
                         </View>
                     </View>
-                    {seatsError ? <Text style={{ color: 'red', fontSize: 12 }}>{seatsError}</Text> : null}
-                    <View style={styles.inputContainer}>
-                        <Icon name="money-bill-wave" type="font-awesome-5" color={GlobalColors.primary} />
-                        <Input
-                            placeholder="Offer your Fare"
-                            inputContainerStyle={{ borderBottomWidth: 0 }}
-                            containerStyle={{ flex: 1, height: 50, paddingTop: 5 }}
-                            inputStyle={styles.input}
-                            keyboardType="numeric"
-                            onChangeText={setFare}
-                        />
-                    </View>
-                    {fareError ? <Text style={{ color: 'red', fontSize: 12 }}>{fareError}</Text> : null}
-                    <Text style={[styles.label, styles.preferableRequirements]}>Preferable Requirements</Text>
-                    <View style={[styles.container, { flexDirection: 'row', justifyContent: 'space-between' }]}>
-                        <View style={styles.checkBoxContainer}>
-                            <Checkbox value={ac} onValueChange={setAC} color={GlobalColors.primary} />
-                            <Text style={[styles.label, { paddingHorizontal: 10 }]}>AC</Text>
-                        </View>
-                        <View style={styles.checkBoxContainer}>
-                            <Checkbox value={gender} onValueChange={setGender} color={GlobalColors.primary} />
-                            <Text style={[styles.label, { paddingHorizontal: 10 }]}>Same Gender</Text>
-                        </View>
-                        <View style={styles.checkBoxContainer}>
-                            <Checkbox value={music} onValueChange={setMusic} color={GlobalColors.primary} />
-                            <Text style={[styles.label, { paddingHorizontal: 10 }]}>Music</Text>
-                        </View>
-                    </View>
 
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                            style={[styles.button, { backgroundColor: hasVehicle ? GlobalColors.secondary : GlobalColors.primary }]}
-                            onPress={async() => {
-                                if (validateInputs()) {
-                                    saveRequest();
-                                    navigation.navigate('FindRider');
-                                }
-                            }}
-                            disabled={hasVehicle}
-                        >
-                            <Text style={styles.buttonText}>Find a Host</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.button, { backgroundColor: hasVehicle ? GlobalColors.primary : GlobalColors.secondary }]}
-                            onPress={async() => {
-                                if (validateInputs()) {
-                                    saveRequest();
-                                    navigation.navigate('FindRider');
-                                }
-                            }}
-                            disabled={!hasVehicle}
-                        >
-                            <Text style={styles.buttonText}>Find a Rider</Text>
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
-            </View>
-        </View>
+        </>
     );
 };
 
@@ -455,7 +564,7 @@ const styles = StyleSheet.create({
         fontSize: 20,
         margin: 3,
         paddingHorizontal: 10,
-        paddingVertical: 1,
+        paddingVertical: 5,
         borderRadius: 5,
         backgroundColor: GlobalColors.secondary,
         color: GlobalColors.background

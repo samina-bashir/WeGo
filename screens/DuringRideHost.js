@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Animated, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, Linking, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import styles from '../styles/globalStyles';
 import GlobalColors from '../styles/globalColors';
 import { Icon, Avatar } from 'react-native-elements';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { firestoreDB } from '../config/firebase.config';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { collection } from 'firebase/firestore';
 import FeedbackHost from '../components/FeedbackHost';
+import { useSelector } from 'react-redux';
 
 const DuringRideHost = () => {
+  const [showFeedback, setShowFeedback]= useState(false)
+  const [isLoading, setIsLoading]= useState(false)
   const [isMapReady, setIsMapReady] = useState(false);
   const [rideDetailsHeight, setRideDetailsHeight] = useState(200);
 
@@ -21,19 +24,20 @@ const DuringRideHost = () => {
     latitudeDelta: 0.0102,
     longitudeDelta: 0.0101,
   };
-  const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
   const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
   const [fare, setFare] = useState(null);
   const destination = { latitude: 31.484787, longitude: 74.298013 };
   const navigation = useNavigation();
   const [riders, setRiders] = useState([]);
-  const rideID= 'Ri5o1r474TkoTNC0XUZ6';
+  const rideID = useRoute().params?.requestId;
 
   useEffect(() => {
     const fetchData = async () => {
+      setIsLoading(true)
       try {
-        const rideDocRef = doc(collection(firestoreDB, 'ride'), rideID);
+        const rideDocRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
         const unsubscribe = onSnapshot(rideDocRef, async (rideSnapshot) => {
           try {
             const rideData = rideSnapshot.data();
@@ -41,15 +45,11 @@ const DuringRideHost = () => {
               console.error('Ride data is null or undefined.');
               return;
             }
+            console.log(rideData)
             setFromLocation(rideData.from);
             setToLocation(rideData.to);
 
-            const currentUserRider = rideData.Riders.find(rider => rider.rider === currentUser._id);
-            if (!currentUserRider) {
-              console.error('Current user rider data not found in ride.');
-              return;
-            }
-            setFare(currentUserRider.fare);
+          
 
             const ridersData = [];
             for (const rider of rideData.Riders) {
@@ -76,27 +76,42 @@ const DuringRideHost = () => {
       } catch (error) {
         console.error('Error setting up snapshot listener:', error);
       }
+      console.log('Done Fetching')
+      setIsLoading(false)
     };
 
     fetchData();
   }, []);
-  
 
-const cancelRide = async () => {
-  try {
-    const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
-    await updateDoc(rideRef, { status: 'cancelled' });
-    console.log('Ride status updated successfully to "cancelled"');
-    navigation.navigate('RequestCreation') 
-  } catch (error) {
-    console.error('Error updating ride status:', error);
-  }
-};
+
+  const cancelRide = async () => {
+    try {
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
+      const rideSnapshot = await getDoc(rideRef);
+      const rideData = rideSnapshot.data();
+      const updatedRiders = [...rideData.Riders];
+      for (let i = 0; i < rideData.Riders.length; i++) {
+        const rider = rideData.Riders[i];
+        await updateDoc(doc(firestoreDB, 'users', rider.rider), {
+          fareDue: false
+      });
+        updatedRiders[i].status = "Cancelled";
+      } 
+      
+      await updateDoc(rideRef, { Riders: updatedRiders });
+      console.log('Ride status updated successfully to "cancelled"');
+      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      navigation.navigate('RequestCreation')
+    } catch (error) {
+      console.error('Error updating ride status:', error);
+    }
+  };
 
   const handleMapReady = () => {
     setIsMapReady(false);
   };
-  
+
   const handleGestureEvent = (event) => {
     const offsetY = -1 * event.nativeEvent.translationY;
     const newHeight = rideDetailsHeight + offsetY;
@@ -115,6 +130,9 @@ const cancelRide = async () => {
   return (
     <>
       <GestureHandlerRootView style={styles.container}>
+        <TouchableOpacity onPress={()=>{setShowFeedback(true)}}>
+        <Text style={{fontSize:25, color: GlobalColors.background, marginLeft: 'auto', paddingHorizontal:10}}>Feedback</Text>
+        </TouchableOpacity>
         <MapView
           style={styles.map}
           initialRegion={initialRegion}
@@ -122,12 +140,14 @@ const cancelRide = async () => {
           followsUserLocation
           onMapReady={handleMapReady}
         >
+          {isMapReady && (
+            <>
           <Marker
             coordinate={{ latitude: 31.484787, longitude: 74.298013 }}
             title="Your Location"
             description="This is where you are"
           />
-          {isMapReady && (
+          
             <MapViewDirections
               origin={initialRegion}
               destination={destination}
@@ -135,13 +155,22 @@ const cancelRide = async () => {
               strokeWidth={4}
               strokeColor="blue"
             />
+            </>
           )}
         </MapView>
-
-        <PanGestureHandler onGestureEvent={handleGestureEvent}>
+        {isLoading ? (
+          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+        ):
+       ( <PanGestureHandler onGestureEvent={handleGestureEvent}>
           <Animated.View style={[styles.rideDetails, { height: rideDetailsHeight }]}>
-            <Text style={styles.locationText}>From: {fromLocation}</Text>
-            <Text style={styles.locationText}>To: {toLocation}</Text>
+            <View style={{ flexDirection: 'row' }}>
+              <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+              <Text style={styles.locationText}> From: {fromLocation} </Text>
+            </View>
+            <View style={{ flexDirection: 'row' }}>
+              <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+              <Text style={styles.locationText}> To: {toLocation} </Text>
+            </View>
 
             <TouchableOpacity style={styles.cancelButton} onPress={cancelRide}>
               <Text style={styles.cancelButtonText}>CANCEL RIDE</Text>
@@ -169,7 +198,7 @@ const cancelRide = async () => {
                     <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', rider) }}>
                       <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
                     </TouchableOpacity>
-                    {rider.phoneNumber && <TouchableOpacity onPress={() => {Linking.openURL(`tel:${rider.phoneNumber}`)}}>
+                    {rider.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${rider.phoneNumber}`) }}>
                       <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
                     </TouchableOpacity>}
                   </View>
@@ -177,9 +206,9 @@ const cancelRide = async () => {
               </View>
             ))}
           </Animated.View>
-        </PanGestureHandler>
+        </PanGestureHandler>)}
       </GestureHandlerRootView>
-      <FeedbackHost riders={riders} visible={true} />
+      {showFeedback && <FeedbackHost riders={riders} visible={true} />}
     </>
   );
 }

@@ -40,6 +40,7 @@ const MyChats = () => {
 
   useEffect(() => {
     const fetchChats = async () => {
+      setIsLoading(true)
       const userChatsRef = query(
         collection(firestoreDB, 'chats'),
         where('participants', 'array-contains', user._id),

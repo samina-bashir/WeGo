@@ -8,20 +8,20 @@ import { firestoreDB } from '../config/firebase.config';
 import { useStripe } from '@stripe/stripe-react-native';
 import axios from 'axios';
 import { Overlay } from 'react-native-elements';
+import { useSelector } from 'react-redux';
 
-const PayNowOverlay = ({ totalAmount, host, riders }) => {
-    const [isOverlayVisible, setOverlayVisible] = useState(false);
+const PayNowOverlay = ({ totalAmount, host, riders, rideID }) => {
+    const [isOverlayVisible, setOverlayVisible] = useState(true);
     const [isVisible, setVisible] = useState(false);
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
-    const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
-    const rideID = 'Ri5o1r474TkoTNC0XUZ6';
-    useEffect(() => {
+    const currentUser = useSelector((state) => state.user.user);
+   {/* useEffect(() => {
         const timer = setTimeout(() => {
             setOverlayVisible(true);
         }, 10000);
         return () => clearTimeout(timer);
 
-    }, []);
+    }, []);*/}
 
     const onPayNow = async () => {
         try {
@@ -70,8 +70,13 @@ const PayNowOverlay = ({ totalAmount, host, riders }) => {
                     await updateDoc(rideRef, {
                         Riders: riders
                     });
+                    await updateDoc(doc(firestoreDB, 'users', currentUser._id), {
+                        fareDue: false
+                    });
                     setOverlayVisible(false)
+                    console.log('paid')
                     setVisible(true)
+                    
                     console.log('Rider fare updated successfully to "paid"');
                 } else {
                     console.log("Ride does not exist.");
@@ -99,7 +104,7 @@ const PayNowOverlay = ({ totalAmount, host, riders }) => {
 
                 </View>
             </Overlay>
-            <Feedback host={host} riders={riders} visible={isVisible} />
+            {isVisible && <Feedback host={host} riders={riders} rideID={rideID}/>}
         </>
     );
 };

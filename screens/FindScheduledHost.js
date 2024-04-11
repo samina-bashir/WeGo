@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking, ActivityIndicator } from 'react-native';
 import { collection, query, where, doc, getDocs, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { Avatar, Icon, Input, Switch } from 'react-native-elements';
@@ -9,10 +9,9 @@ import { Modal } from 'react-native';
 import Picker from '../components/Picker';
 import CoriderModal from '../components/CoridersModal';
 import { useSelector } from 'react-redux';
-import { ActivityIndicator } from 'react-native';
 
-const FindHostScreen = () => {
-    const [isLoading, setIsLoading] = useState(true);
+const FindScheduledHost = () => {
+    const [isLoading, setIsLoading]= useState(true)
     const [requests, setRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
     const navigation = useNavigation();
@@ -31,54 +30,47 @@ const FindHostScreen = () => {
     const [showAcceptModal, setShowAcceptModal] = useState(false);
     const [selectedRequestId, setSelectedRequestId] = useState(null);
     const currentUser = useSelector((state) => state.user.user);
-    const myReqData = useRoute().params;
+    const myReqData =  useRoute().params;
     const response = {
+
         requestId: myReqData?.id,
         fare: myReqData?.fare,
         from: myReqData?.from,
         responseBy: currentUser?._id,
         status: "pending",
         to: myReqData?.to,
+        schedule: myReqData?.schedule,
+        startDate: myReqData?.startDate,
+        endDate: myReqData?.endDate,
         seats: myReqData?.seats
-
     };
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
 
     useEffect(() => {
         const fetchRequests = async () => {
-
             setIsLoading(true)
-            const requestsCollection = collection(firestoreDB, 'findRiderRequests');
+            const requestsCollection = collection(firestoreDB, 'findScheduledRiderRequests');
             const q = query(requestsCollection);
 
             const querySnapshot = await getDocs(q);
             const requestsData = [];
-            console.log('hi', querySnapshot.docs[0].data())
+
             for (const document of querySnapshot.docs) {
                 const requestData = document.data();
                 const createdBy = requestData.createdBy;
-                console.log('ok', createdBy)
 
                 // Retrieve additional data from 'users' collection
                 const userRef = doc(firestoreDB, 'users', createdBy);
-                console.log('ok2')
                 const userSnapshot = await getDoc(userRef);
-                console.log('ok3')
                 requestData.userData = userSnapshot.exists() ? userSnapshot.data() : {};
-                console.log('id',myReqData);
+                const email = requestData.userData.email;
+                const domain = email.substring(email.lastIndexOf("@") + 1);
                 const coriderRef = doc(firestoreDB, 'ride', document.id);
-                try {
-                    
-                    const coriders = await getDoc(coriderRef);
-                    console.log('ok5');
-                
+                const coriders = await getDoc(coriderRef);
                 requestData.coriders = coriders.exists() ? coriders.data().Riders : [];
                 // Create Firestore document reference
-            } catch (error) {
-                console.error(error);
-            }
-                const email = requestData.userData.email;
-             
-                const domain = email.substring(email?.lastIndexOf("@") + 1);
                 const orgRef = doc(firestoreDB, 'organizations', domain);
 
                 // Get the document
@@ -104,15 +96,14 @@ const FindHostScreen = () => {
                 }
 
                 requestsData.push({
-                    id: document?.id,
+                    id: document.id,
                     ...requestData,
                 });
             }
-            setFilteredRequests(requestsData);
+
             setRequests(requestsData);
-            
-            console.log('rd',requestsData)
-            applyFilters();
+            setFilteredRequests(requestsData);
+            applyFilters()
             setIsLoading(false)
         };
 
@@ -132,9 +123,8 @@ const FindHostScreen = () => {
                 request.userData.rating >= ratingRange[0] && request.userData.rating <= ratingRange[1] &&
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
-                !declinedRequests.includes(request?.id) &&
-                request.createdBy != currentUser._id &&
-                request.status != 'closed'
+                !declinedRequests.includes(request.id) &&
+                request.createdBy !=currentUser._id
             );
         });
         setFilteredRequests(filtered);
@@ -151,52 +141,65 @@ const FindHostScreen = () => {
     const renderRequestItem = ({ item }) => (
         <View style={styles.card}>
             <View style={styles.profileSection}>
-                {item.userData?.profilePic ? (<Avatar rounded size="large" source={{ uri: item.userData?.profilePic }} />)
-                    : (
-                        <Avatar rounded size={90} source={require('../assets/avatar.jpg')}
-                        />)}
-                <View style={styles.hostDetails}>
-                    <Text style={styles.textBold}>{item.driverInfo?.make} {item.driverInfo?.model}</Text>
-                    <Text style={styles.text}>{item.userData.name}</Text>
-                    <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
-                    <View style={{ flexDirection: 'row' }}>
-                        <Icon name="star" type="material" color={'gold'} size={15} />
-                        <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
+
+                <View style={{ flexDirection: 'row',alignItems: 'center'}}>
+                    {item.userData?.profilePic ? (<Avatar rounded size={75} source={{ uri: item.userData?.profilePic }} />)
+                        : (
+                            <Avatar rounded size={75} source={require('../assets/avatar.jpg')}
+                            />)}
+                    <View style={styles.hostDetails}>
+                        <Text style={styles.textBold}>{item.driverInfo?.make} {item.driverInfo?.model}</Text>
+                        <Text style={styles.text}>{item.userData.name}</Text>
+                        <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
+                        <View style={{ flexDirection: 'row' }}>
+                            <Icon name="star" type="material" color={'gold'} size={15} />
+                            <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
+                        </View>
+
                     </View>
 
                 </View>
 
-                <View style={{ paddingRight: 10 }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>
-                    
-                    <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
-                        <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
-                            Coriders
-                        </Text>
-                    </TouchableOpacity>
-                    <CoriderModal
-                        visible={coridersVisible}
-                        coriders={selectedItem?.coriders}
-                        onClose={() => setCoridersVisible(false)}
-                    />
-                    <View style={styles.callChatIcons}>
-                        <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
-                            <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
+                <View style={{ paddingRight: 7, backgroundColor: 'white', marginLeft:'auto' }}>
+                    <View style={{ marginLeft: 'auto' }}>
+                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
+                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>
+                        <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
+                            <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
+                                Coriders
+                            </Text>
                         </TouchableOpacity>
-                        {item.userData.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${item.userData.phoneNumber}`) }}>
-                            <Icon name="phone-alt" type="font-awesome-5" size={28} color={GlobalColors.primary} />
-                        </TouchableOpacity>}
+                        <CoriderModal
+                            visible={coridersVisible}
+                            coriders={selectedItem?.coriders}
+                            onClose={() => setCoridersVisible(false)}
+                        />
+
+                    </View>
+                    <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                        <Text style={{ fontStyle: 'italic', fontSize: 12, marginBottom: -5  }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
+                        <Text style={{ fontWeight: 'bold', fontSize: 12,marginBottom: -5  }}> to </Text>
+                        <Text style={{ fontStyle: 'italic', fontSize: 12 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
                     </View>
                 </View>
             </View>
+            <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
+
             <View style={{ flexDirection: 'row' }}>
-                <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginLeft: 'auto' }}>
+                <View style={{ flexDirection: 'row', paddingHorizontal: 5, paddingVertical: 3 }}>
                     <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
                     <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
                 </View>
+
+                <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2 , paddingRight:7}}>
+                    {daysOfWeek.map((day, index) => (
+                        <TouchableOpacity key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
+                            <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
             </View>
+
             <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
@@ -247,7 +250,7 @@ const FindHostScreen = () => {
     }, [selectedRequestId]);
     const handleAcceptance = async (reqID) => {
         setSelectedRequestId(reqID)
-
+        
         // Add or update response in Firestore
 
         try {
@@ -261,18 +264,18 @@ const FindHostScreen = () => {
                 const responseIndex = docSnapshot.data().responses.findIndex(response => response.responseBy === currentUser?._id);
                 console.log(responseIndex)
                 if (responseIndex == -1) {
-                    // Document already exists, update it
-                    await updateDoc(responseRef, {
-                        responses: [...docSnapshot.data().responses, response]
-                    });
-                } else {
-                    const existingData = docSnapshot.data()
-                    existingData.responses[responseIndex] = response
-                    console.log('d', existingData)
-                    await updateDoc(responseRef,
-                        { responses: existingData.responses }
-                    );
-                }
+                // Document already exists, update it
+                await updateDoc(responseRef, {
+                    responses: [...docSnapshot.data().responses, response]
+                });
+            }else{
+                const existingData=docSnapshot.data()
+                existingData.responses[responseIndex]=response
+                console.log('d',existingData)
+                await updateDoc(responseRef, 
+                   {responses: existingData.responses}
+                );
+            }
             } else {
                 // Document doesn't exist, create it with the accepted request ID
                 await setDoc(responseRef, {
@@ -324,8 +327,8 @@ const FindHostScreen = () => {
 
             </View>
             {isLoading && (
-                <ActivityIndicator size={"large"} color={GlobalColors.primary} />
-            )}
+          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+        )}
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
@@ -487,6 +490,7 @@ const FindHostScreen = () => {
                                 />
                             </View>
                         </View>
+
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
@@ -550,7 +554,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 2,
     },
     hostDetails: {
-        flex: 1,
+        flex: 0,
     },
     textBold: {
         fontWeight: 'bold',
@@ -572,10 +576,10 @@ const styles = StyleSheet.create({
     preferences: {
         borderWidth: 1,
         borderColor: GlobalColors.primary,
-        paddingHorizontal: 15,
+        paddingHorizontal: 10,
         borderRadius: 10,
-        marginHorizontal: 5,
-        fontStyle: 'italic'
+        marginHorizontal: 2,
+        fontStyle: 'italic',
     },
     modalContainer: {
         flex: 1,
@@ -621,6 +625,26 @@ const styles = StyleSheet.create({
         height: 40,
         marginLeft: 2
     },
+    dayContainer: {
+        width: 20,
+        height: 20,
+        borderRadius: 20,
+        backgroundColor: 'lightgrey',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginHorizontal: 1,
+    },
+    activeDay: {
+        backgroundColor: GlobalColors.primary,
+    },
+    dayText: {
+        fontSize: 12,
+        color: GlobalColors.text
+    },
+    activeText: {
+        color: GlobalColors.background,
+        fontWeight: 'bold'
+    },
 });
 
-export default FindHostScreen;
+export default FindScheduledHost;

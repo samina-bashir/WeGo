@@ -1,5 +1,5 @@
 import React, { Component, useEffect, useState } from 'react';
-import { View, Text, Button, TouchableOpacity, Animated, Linking } from 'react-native';
+import { View, Text, Button, TouchableOpacity, Animated, Linking, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
@@ -8,22 +8,24 @@ import { Icon, Overlay, Rating, Avatar, Input } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
 import Feedback from '../components/Feedback';
 import PayNowOverlay from '../components/PayNow';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { firestoreDB } from '../config/firebase.config';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { collection } from 'firebase/firestore';
+import { useSelector } from 'react-redux';
 
 const DuringRideScreen = () => {
+  const [payNow, setPayNow]= useState(false)
   const [isMapReady, setIsMapReady] = useState(false);
   const [rideDetailsHeight, setRideDetailsHeight] = useState(280);
-
+  const [isLoading, setIsLoading]= useState(true)
   const initialRegion = {
     latitude: 31.480864,
     longitude: 74.303114,
     latitudeDelta: 0.0102,
     longitudeDelta: 0.0101,
   };
-  const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
   const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
   const [fare, setFare] = useState(null);
@@ -32,12 +34,13 @@ const DuringRideScreen = () => {
   const [driverInfo, setDriverInfo] = useState(null);
   const [coriders, setCoriders] = useState([]);
   const [driverData, setDriverData] = useState(null);
-  const rideID= 'Ri5o1r474TkoTNC0XUZ6';
+  const rideID = useRoute.params?.requestId;
 
   useEffect(() => {
     const fetchData = async () => {
+      setIsLoading(true)
       try {
-        const rideDocRef = doc(collection(firestoreDB, 'ride'), rideID);
+        const rideDocRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
         const unsubscribe = onSnapshot(rideDocRef, async (rideSnapshot) => {
           try {
             const rideData = rideSnapshot.data();
@@ -45,17 +48,19 @@ const DuringRideScreen = () => {
               console.error('Ride data is null or undefined.');
               return;
             }
-            console.log('Ride data:', rideData); 
+            console.log('Ride data:', rideData);
             setFromLocation(rideData.from);
             setToLocation(rideData.to);
 
             const currentUserRider = rideData.Riders.find(rider => rider.rider === currentUser._id);
             if (!currentUserRider) {
-              console.error('Current user rider data not found in ride.');
-              return;
+             // console.error('Current user rider data not found in ride.');
+           //   return;
             }
-            setFare(currentUserRider.fare);
-
+            setFare(250);
+            await updateDoc(doc(firestoreDB, 'users', currentUser._id), {
+              fareDue: true
+            });
             const driverInfoDocRef = doc(collection(firestoreDB, 'driverInfo'), rideData.Host);
             const userDocRef = doc(collection(firestoreDB, 'users'), rideData.Host);
 
@@ -102,6 +107,7 @@ const DuringRideScreen = () => {
       } catch (error) {
         console.error('Error setting up snapshot listener:', error);
       }
+      setIsLoading(false)
     };
 
     fetchData();
@@ -110,9 +116,24 @@ const DuringRideScreen = () => {
   const cancelRide = async () => {
     try {
       const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
-      await updateDoc(rideRef, { status: 'cancelled' });
+      const rideSnapshot = await getDoc(rideRef);
+      const rideData = rideSnapshot.data();
+      const currentUserIndex = rideData.Riders.findIndex(rider => rider.rider === currentUser._id);
+
+      if (currentUserIndex !== -1) {
+        const updatedRiders = [...rideData.Riders];
+        updatedRiders[currentUserIndex].status = "Cancelled";
+        await updateDoc(rideRef, { Riders: updatedRiders });
+
+      } else {
+        console.error("Current user is not a rider in this ride.");
+      }
+
       console.log('Ride status updated successfully to "cancelled"');
-      navigation.navigate('RequestCreation') 
+      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1, fareDue:false });
+
+      navigation.navigate('RequestCreation')
     } catch (error) {
       console.error('Error updating ride status:', error);
     }
@@ -140,6 +161,9 @@ const DuringRideScreen = () => {
   return (
     <>
       <GestureHandlerRootView style={styles.container}>
+        <TouchableOpacity onPress={()=>setPayNow(true)}>
+          <Text style={{fontSize:25, color: GlobalColors.background, marginLeft: 'auto',paddingHorizontal:10}}>Pay Now</Text>
+        </TouchableOpacity>
         <MapView
           style={styles.map}
           initialRegion={initialRegion}
@@ -163,15 +187,24 @@ const DuringRideScreen = () => {
           )}
         </MapView>
 
-        <PayNowOverlay
-          totalAmount = {fare}
+        {payNow && <PayNowOverlay
+          totalAmount={fare}
           host={driverData}
-          riders= {coriders} />
-        <PanGestureHandler onGestureEvent={handleGestureEvent}>
+          riders={coriders}
+          rideID={rideID} />}
+        {isLoading ? (
+          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+        ):
+        (<PanGestureHandler onGestureEvent={handleGestureEvent}>
           <Animated.View style={[styles.rideDetails, { height: rideDetailsHeight }]}>
-            <Text style={styles.locationText}>From: {fromLocation}</Text>
-            <Text style={styles.locationText}>To: {toLocation}</Text>
-            
+            <View style={{ flexDirection: 'row' }}>
+              <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+              <Text style={styles.locationText}>From: {fromLocation}</Text>
+            </View>
+            <View style={{ flexDirection: 'row' }}>
+              <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+              <Text style={styles.locationText}>To: {toLocation}</Text>
+            </View>
             {driverInfo && (
               <View style={styles.detailsAndFareContainer}>
                 {driverData?.profilePic ? (<Avatar rounded size="large" source={{ uri: driverData?.profilePic }} />)
@@ -188,27 +221,29 @@ const DuringRideScreen = () => {
                   </View>
                 </View>
                 <View>
-                <Text style={[styles.fare, { color: GlobalColors.primary }]}>Rs.{fare}</Text>
-                <View style={styles.callChatIcons}>   
-                  <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', { _id: driverInfo._id, name: driverInfo.driverName, profilePic: driverInfo.profilePic }) }}>
-                    <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
-                  </TouchableOpacity>
-                  <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
-                </View>
+                  <Text style={[styles.fare, { color: GlobalColors.primary }]}>Rs.{fare}</Text>
+                  <View style={styles.callChatIcons}>
+                    <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', driverData) }}>
+                      <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                    </TouchableOpacity>
+                    {driverData?.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${driverData?.phoneNumber}`) }}>
+                      <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                    </TouchableOpacity>}
+                  </View>
                 </View>
               </View>
             )}
             <TouchableOpacity style={styles.cancelButton} onPress={cancelRide}>
               <Text style={styles.cancelButtonText}>CANCEL RIDE</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setRideDetailsHeight(280+70*coriders.length) }}>
+            <TouchableOpacity onPress={() => { setRideDetailsHeight(280 + 70 * coriders.length) }}>
               <Text style={{ color: GlobalColors.primary, fontSize: 25, fontWeight: 'bold' }}>Co-Riders</Text>
             </TouchableOpacity>
 
             {coriders.map((corider, index) => (
               <View key={index} style={styles.detailsAndFareContainer}>
                 {corider?.profilePic ? <Avatar rounded size="large" source={{ uri: corider?.profilePic }} />
-                : (
+                  : (
                     <Avatar rounded size="large" source={require('../assets/avatar.jpg')}
                     />)}
                 <View style={styles.detailsContainer}>
@@ -224,15 +259,15 @@ const DuringRideScreen = () => {
                     <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', corider) }}>
                       <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
                     </TouchableOpacity>
-                    { corider.phoneNumber && <TouchableOpacity onPress={() => {Linking.openURL(`tel:${corider.phoneNumber}`)}}>
-                    <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                    {corider.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${corider.phoneNumber}`) }}>
+                      <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
                     </TouchableOpacity>}
                   </View>
                 </View>
               </View>
             ))}
           </Animated.View>
-        </PanGestureHandler>
+        </PanGestureHandler>)}
       </GestureHandlerRootView>
 
     </>

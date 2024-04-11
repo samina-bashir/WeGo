@@ -14,16 +14,27 @@ export default function FeedbackHost(props) {
   const [isOverlayVisible, setOverlayVisible] = useState(true);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
-  const currentUser = { _id: "gPveNBwnc6S4Czepv6oEL3JfcN63" }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
 
   useEffect(() => {
-    if (feedbackSent.length === props.riders.length && props.riders.length!=0) {
+    if (feedbackSent.length === props.riders.length && props.riders.length != 0) {
       handleCloseOverlay();
     }
   }, [feedbackSent]);
 
-  const handleCloseOverlay = () => {
+  const handleCloseOverlay = async() => {
     setOverlayVisible(false);
+    try {
+      const hostRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+      await updateDoc(hostRef, { ridesAsHost: currentUser.ridesAsHost+1 });
+      props.riders.forEach(async (rider) => {
+        const riderRef = doc(collection(firestoreDB, 'users'), rider._id);
+        await updateDoc(riderRef, { ridesAsRider: rider.ridesAsRider + 1 });
+      });
+     
+    } catch (error) {
+      console.log('Error updating ride status: ', error)
+    }
     navigation.navigate('RequestCreation');
   };
 
@@ -44,7 +55,7 @@ export default function FeedbackHost(props) {
         feedback: riderFeedbacks[index] || '',
         ratedBy: currentUser._id
       };
-   
+
       await saveFeedback(id, 'riderFeedback', feedbackData);
       setFeedbackSent([...feedbackSent, index]);
     } catch (error) {
@@ -58,16 +69,16 @@ export default function FeedbackHost(props) {
         <View style={styles.row}>
           <Text style={styles.name}>{rider.name}</Text>
           <View pointerEvents={feedbackSent.includes(index) ? 'none' : 'auto'} style={{ marginLeft: 'auto', paddingVertical: 10 }}>
-          <Rating
-            type="star"
-            imageSize={20}
-            startingValue={0}
-            onFinishRating={(rating) => {
-              const updatedRiderRatings = [...riderRating]; 
-              updatedRiderRatings[index] = rating; 
-              setRiderRating(updatedRiderRatings); 
-            }}
-          />
+            <Rating
+              type="star"
+              imageSize={20}
+              startingValue={0}
+              onFinishRating={(rating) => {
+                const updatedRiderRatings = [...riderRating];
+                updatedRiderRatings[index] = rating;
+                setRiderRating(updatedRiderRatings);
+              }}
+            />
           </View>
         </View>
         <Text style={styles.feedback}>feedback</Text>
@@ -105,7 +116,7 @@ export default function FeedbackHost(props) {
     try {
       const feedbackRef = doc(collection(firestoreDB, collectionName), id);
       const docSnap = await getDoc(feedbackRef);
-    
+
       if (docSnap.exists()) {
         // Document exists, update it
         await updateDoc(feedbackRef, {
@@ -118,6 +129,35 @@ export default function FeedbackHost(props) {
           feedbacks: [data]
         });
       }
+
+      const userRef = doc(firestoreDB, 'users', id);
+
+      // Fetch the current user data
+      const userSnapshot = await getDoc(userRef);
+      if (!userSnapshot.exists()) {
+        console.log('User does not exist.');
+        return;
+      }
+
+      const userData = userSnapshot.data();
+
+      // Calculate new rating
+      const newRatingCount = userData.ratingCount + 1;
+      const newRatingSum = userData.ratingSum + data.rating;
+      const newRating = newRatingSum / newRatingCount;
+
+      try {
+        // Update the user document
+        await updateDoc(userRef, {
+          ratingCount: newRatingCount,
+          ratingSum: newRatingSum,
+          rating: newRating
+        });
+
+        console.log('User data updated successfully.');
+      } catch (error) {
+        console.error('Error updating user data:', error);
+      }
       console.log('Feedback saved successfully.');
     } catch (error) {
       console.error('Error saving feedback: ', error);
@@ -127,7 +167,7 @@ export default function FeedbackHost(props) {
 
   return (
     <Overlay
-      isVisible={props.visible }
+      isVisible={props.visible}
       overlayStyle={[styles.overlay, { height: overlayHeight }]}
     >
       <View style={styles.column}>

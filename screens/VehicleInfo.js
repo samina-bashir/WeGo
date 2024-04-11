@@ -31,7 +31,7 @@ const VehicleInfo = () => {
     const [vehicleRegistrationError, setVehicleRegistrationError] = useState('');
     const [imagesError, setImagesError] = useState('');
 
-    const user = useSelector((state) => state.user.user);
+    const user = useSelector((state) => state.user?.user);
 
     const navigation = useNavigation();
     const handleImagePicker = (type) => {
@@ -204,6 +204,7 @@ const VehicleInfo = () => {
                     selectedValue={vehicleType}
                     onValueChange={(itemValue) => validateVehicleType(itemValue)}
                     placeholder="Select Vehicle Type"
+                    margin='35%'
                 />
                 {vehicleTypeError !== '' && <Text style={styles.errorText}>{vehicleTypeError}</Text>}
                 <TextInput

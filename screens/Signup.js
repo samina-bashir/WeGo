@@ -22,6 +22,8 @@ const SignUp = () => {
   const [hasVehicle, setHasVehicle] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [avatarSource, setAvatarSource] = useState(null);
+  const [bio, setBio] = useState('');
+  const [bioError, setBioError] = useState('');
   const genderIcons = [
     { icon: 'mars', label: 'Male' },
     { icon: 'venus', label: 'Female' },
@@ -36,9 +38,9 @@ const SignUp = () => {
   const navigation = useNavigation();
 
   const handleSignUp = async () => {
-    isError=validateAllFields();
+    isError = validateAllFields();
     if (isError) {
-      Alert.alert('Error','Invalid Inputs Entered');
+      Alert.alert('Error', 'Invalid Inputs Entered');
       console.log('error');
     } else {
       try {
@@ -55,12 +57,17 @@ const SignUp = () => {
             driver: hasVehicle,
             status: 'unverified',
             rating: 0,
-            cancellationHost: 0,
-            cancellationRider: 0
+            ridesAsHost: 0,
+            ridesAsRider: 0,
+            cancelledRides: 0,
+            ratingCount: 0,
+            ratingSum: 0,
+            bio: '',
+            fareDue: false
           };
-          
+
           try {
-            await setDoc(doc(firestoreDB, "users",userCredentials.user.uid), data);
+            await setDoc(doc(firestoreDB, "users", userCredentials.user.uid), data);
             dispatch(SET_USER(data))
 
           } catch (e) {
@@ -136,7 +143,7 @@ const SignUp = () => {
 
   const validatePhoneNumber = (text) => {
     setPhoneNumber(text);
-    setPhoneNumberError(text.trim() !== '' && !(/^\d{10}$/.test(text)) ? 'Please enter a valid phone number' : '');
+    setPhoneNumberError(text.trim() !== '' && !(/^\d{11}$/.test(text)) ? 'Please enter a valid phone number' : '');
   };
   const validateAllFields = () => {
     validateName(name);
@@ -254,6 +261,7 @@ const SignUp = () => {
           </TouchableOpacity>
         </View>
         {renderInputWithIcon('Enter your name', 'user', name, validateName, nameError)}
+        {renderInputWithIcon('Enter your bio', 'user', bio, setBio, bioError)}
         {renderInputWithIcon('Enter your email', 'envelope', email, validateEmail, emailError, 'email-address')}
         {renderInputWithIcon('Set your password', 'lock', password, validatePassword, passwordError, undefined, true)}
         {renderInputWithIcon('Confirm password', 'lock', confirmPassword, validateConfirmPassword, confirmPasswordError, undefined, true)}
@@ -348,7 +356,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: GlobalColors.primary,
     paddingHorizontal: 20,
-    marginBottom: 10,
+    marginBottom: 5,
   },
   input: {
     flex: 1,
@@ -358,7 +366,7 @@ const styles = StyleSheet.create({
   },
   buttonGroupContainer: {
     marginVertical: '3%',
-    height: 70,
+    height: 60,
     borderWidth: 0
   },
   buttonGroupButton: {
@@ -378,9 +386,9 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: GlobalColors.primary,
-    padding: 15,
+    padding: 12,
     paddingLeft: 25,
-    marginVertical: '4%',
+    marginVertical: '2%',
     borderRadius: 30,
     flexDirection: 'row',
     alignItems: 'center',
@@ -391,7 +399,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     fontWeight: 'bold',
-  }, loginText: {
+  }, 
+  loginText: {
     textAlign: 'center',
     fontStyle: 'italic',
     padding: 10, // Adjust the spacing as needed
