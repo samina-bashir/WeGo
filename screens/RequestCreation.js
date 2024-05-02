@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -20,6 +20,7 @@ import SetSchedule from './SetSchedule';
 import Menu from '../components/Menu';
 import MyRequests from './MyRequests';
 import { useSelector } from 'react-redux';
+import SetLocationScreen from './SetLocation';
 
 const windowWidth = Dimensions.get('window').width;
 const windowHeight = Dimensions.get('window').height;
@@ -39,6 +40,7 @@ const RequestCreationScreen = () => {
     const [from, setFrom] = useState(null);
     const [route, setRoute] = useState(null);
     const [showSchedule, setShowSchedule] = useState(false);
+    const [showLocation, setShowLocation] = useState(false);
     const navigation = useNavigation();
     const [fromError, setFromError] = useState('');
     const [toError, setToError] = useState('');
@@ -61,8 +63,7 @@ const RequestCreationScreen = () => {
         })
     );
     const [schedule, setSchedule] = useState(null);
-
-    const currentUser = useSelector((state) => state.user.user);
+    const currentUser = {_id: 'dd'}//useSelector((state) => state.user.user);
 
     useEffect(() => {
         (async () => {
@@ -280,6 +281,12 @@ const RequestCreationScreen = () => {
 
         }
     };
+    const handleLocationSet = (from,to) =>{
+        setFrom(from)
+        setTo(to)
+        setShowLocation(false)
+        console.log('ok')
+    }
     const handleScheduleSet = (receivedSchedule, receivedStartDate, receivedEndDate, roundTrip) => {
         const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -323,9 +330,15 @@ const RequestCreationScreen = () => {
                             onScheduleSet={handleScheduleSet}
                             onClose={onClose}
                         /></View>)}
+            {showLocation &&
+                (<View style={{ height: windowHeight+20, marginTop:5 }}>
+                    <SetLocationScreen
+                        onLocationSet={handleLocationSet}
+                    />
+                </View>)}
 
             <View style={styles.container}>
-               {location && <MapView
+                {location && <MapView
                     style={styles.map}
                     showsUserLocation={true}
                     followsUserLocation={true}
@@ -336,7 +349,7 @@ const RequestCreationScreen = () => {
                         longitudeDelta: 0.03,
                     }}
                 >
-                   
+
                 </MapView>}
                 <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 10, position: 'absolute', top: 30, left: 10 }}>
                     <Icon type='font-awesome-5' name='bars' color={GlobalColors.primary} />
@@ -367,29 +380,37 @@ const RequestCreationScreen = () => {
                             </Overlay>
                         </View>
                         {vehicleError ? <Text style={{ color: 'red', fontSize: 12 }}>{vehicleError}</Text> : null}
-
-                        <View style={styles.inputContainer}>
-                            <Icon name='map-marker' type='font-awesome' color={GlobalColors.primary} />
-                            <Input
-                                placeholder=" From"
-                                inputContainerStyle={{ borderBottomWidth: 0 }}
-                                onChangeText={setFrom}
-                                containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
-                                inputStyle={styles.input}
-                            />
-                        </View>
+                        <TouchableOpacity onPress={() => setShowLocation(true)}>
+                            <View style={styles.inputContainer}>
+                                <Icon name='map-marker' type='font-awesome' color={GlobalColors.primary} />
+                                <ScrollView horizontal={true}>
+                                <Input
+                                    placeholder=" From"
+                                    value={from?.name}
+                                    inputContainerStyle={{ borderBottomWidth: 0 }}
+                                    containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
+                                    inputStyle={styles.input}
+                                    editable={false} 
+                                />
+                                </ScrollView>
+                            </View>
+                        </TouchableOpacity>
                         {fromError ? <Text style={{ color: 'red', fontSize: 12 }}>{fromError}</Text> : null}
 
+                        <TouchableOpacity onPress={() => setShowLocation(true)}>
                         <View style={styles.inputContainer}>
                             <Icon name='search-location' type='font-awesome-5' color={GlobalColors.primary} />
-                            <Input
+                            <ScrollView horizontal={true}>
+                               <Input
                                 placeholder="Where to?"
                                 inputContainerStyle={{ borderBottomWidth: 0 }}
                                 containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
                                 inputStyle={styles.input}
-                                onChangeText={setTo}
+                                editable={false}
+                                value={to?.name}
 
                             />
+                             </ScrollView>
                             <TouchableOpacity onPress={() => setIsDropDownVisible(true)} style={{ flexDirection: 'row', borderWidth: 1, borderColor: GlobalColors.primary, borderRadius: 20, justifyContent: 'center', alignItems: 'center', padding: 5 }}>
                                 <Icon name='clock-o' type='font-awesome' color={GlobalColors.primary} />
                                 <Text style={{ marginHorizontal: 5 }}>{selectedSchedule}</Text>
@@ -415,6 +436,7 @@ const RequestCreationScreen = () => {
                                 </View>
                             </Modal>
                         </View>
+                        </TouchableOpacity>
 
                         {toError ? <Text style={{ color: 'red', fontSize: 12 }}>{toError}</Text> : null}
 

@@ -4,8 +4,11 @@
       "config": "metro.config.js"
     },
     "extra": {
-      "YOUR_SERVER_URL": "http://192.168.100.176:3000"
-    },   
+      "YOUR_SERVER_URL": "http://192.168.100.176:3000",
+      "eas": {
+        "projectId": "f5e9eaae-1d57-4c8c-8a1b-bc4f2b65c72c"
+      }
+    },
     "name": "WeGo",
     "slug": "WeGo",
     "version": "1.0.0",
@@ -31,6 +34,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "owner": "sami_na"
   }
 }
