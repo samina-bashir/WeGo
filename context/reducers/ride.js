@@ -11,6 +11,7 @@ const initialState = {
     driverInfo: null,
     coriders: [],
     wayPoints: [],
+    confirmedWayPoints: [],
     location: null
     // Add other ride-related state properties if needed
 };
@@ -76,6 +77,11 @@ const rideReducer = (state = initialState, action) => {
             return {
                 ...state,
                 wayPoints: action.payload,
+            };
+        case 'SET_CONFIRMED_WAYPOINTS':
+            return {
+                ...state,
+                confirmedWayPoints: action.payload,
             };
         case 'SET_LOCATION':
             return {

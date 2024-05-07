@@ -12,7 +12,7 @@ import { collection } from 'firebase/firestore';
 import FeedbackHost from '../components/FeedbackHost';
 import { useSelector, useDispatch } from 'react-redux';
 import * as Location from 'expo-location';
-import { setLoading, setLocation, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints } from '../context/actions/rideActions';
+import { setLoading, setConfirmedWayPoints, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints } from '../context/actions/rideActions';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import MapViewDirections from 'react-native-maps-directions';
@@ -49,6 +49,7 @@ const DuringRideHost = () => {
   const fare = useSelector(state => state.ride.fare);
   const riders = useSelector(state => state.ride.coriders);
   const wayPoints = useSelector(state => state.ride.wayPoints);
+  const confirmedWaypoints = useSelector(state => state.ride.confirmedWayPoints);
   const navigation = useNavigation();
   const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
   const mapRef = useRef();
@@ -78,22 +79,10 @@ const DuringRideHost = () => {
     };
   }, []);
 
-  async function schedulePushNotification() {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        sound: 'default',
-        title: "You've got mail! 📬",
-        body: 'Here is the notification body',
-        data: { data: 'goes here' },
-      },
-      trigger: { seconds: 2 },
-    });
-  }
-
   async function registerForPushNotificationsAsync() {
     let token;
 
-    if (Platform.OS === 'android' ) {
+    if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
@@ -113,7 +102,7 @@ const DuringRideHost = () => {
       token = await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig.extra.eas?.projectId,
       })
-     
+
     } else {
       alert('Push Notifications are not supported on this device');
     }
@@ -157,7 +146,7 @@ const DuringRideHost = () => {
     }
 
     try {
-      await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
+    //  await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
       //  await registerBackgroundFetchAsync()
       console.log('Started receiving location updates.');
     } catch (error) {
@@ -169,6 +158,36 @@ const DuringRideHost = () => {
     dispatch(setDistance(result.distance.toFixed(2)));
     dispatch(setDuration(result.duration));
     adjustMapViewport(fromRideLocation, toRideLocation);
+  };
+
+  const confirmWayPoint = () => {
+    if (confirmedWaypoints.length > 0 && !confirmedWaypoints[confirmedWaypoints.length - 1][1]) {
+      const wp = confirmedWaypoints[confirmedWaypoints.length - 1][0]
+      // Display alert to confirm waypoint
+      Alert.alert(
+        `Confirm ${wp.type}`,
+        `Have you ${wp.type === 'Pickup' ? 'picked up' : 'dropped off'} ${wp.riderName}?`,
+        [
+          {
+            text: `Confirm ${wp.type}`,
+            onPress: () => {
+              // Set the last waypoint to true
+              const updatedWaypoints = [...confirmedWaypoints];
+              updatedWaypoints[confirmedWaypoints.length - 1][1] = true;
+              dispatch(setConfirmedWayPoints(updatedWaypoints));
+              // Navigate to next
+              const index = wayPoints.findIndex(w => w === wp);
+              if (index == -1) {
+                Linking.openURL(`google.navigation:q=${toRideLocation.latitude},${toRideLocation.longitude}&mode=d`)
+              } else {
+                Linking.openURL(`google.navigation:q=${wayPoints[index].latitude},${wayPoints[index].longitude}&mode=d`)
+              }
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    }
   };
 
   const adjustMapViewport = (coordinate1, coordinate2) => {
@@ -198,7 +217,7 @@ const DuringRideHost = () => {
         location.coords.longitude,
         ...(wayPoints.map(wayPoint => wayPoint.longitude))
       );
-      
+
     } else if (coordinate1 && coordinate2 && wayPoints) {
       minLat = Math.min(
         coordinate1.latitude,
@@ -220,8 +239,8 @@ const DuringRideHost = () => {
         coordinate2.longitude,
         ...(wayPoints.map(wayPoint => wayPoint.longitude))
       );
-      
-    
+
+
     } else if (coordinate1 && coordinate2 && location) {
       minLat = Math.min(coordinate1.latitude, coordinate2.latitude, location.latitude);
       maxLat = Math.max(coordinate1.latitude, coordinate2.latitude, location.latitude);
@@ -287,10 +306,10 @@ const DuringRideHost = () => {
                   const riderData = riderSnapshot.data();
                   if (riderData) {
                     ridersData.push(riderData);
-                    rider.from.riderName= riderData.name
-                    rider.to.riderName= riderData.name
-                    rider.from.type='Pickup'
-                    rider.to.type='DropOff'
+                    rider.from.riderName = riderData.name
+                    rider.to.riderName = riderData.name
+                    rider.from.type = 'Pickup'
+                    rider.to.type = 'DropOff'
                     wp.push(rider.from)
                     wp.push(rider.to)
                   } else {
@@ -342,6 +361,32 @@ const DuringRideHost = () => {
 
       await updateDoc(rideRef, { Riders: updatedRiders });
       console.log('Ride status updated successfully to "cancelled"');
+      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      navigation.navigate('RequestCreation')
+    } catch (error) {
+      console.error('Error updating ride status:', error);
+    }
+  };
+
+  const cancelRider = async (rider) => {
+    try {
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
+      const rideSnapshot = await getDoc(rideRef);
+      const rideData = rideSnapshot.data();
+      const updatedRiders = [...rideData.Riders];
+      for (let i = 0; i < rideData.Riders.length; i++) {
+        if (rider._id == rideData.Riders[i]){
+        await updateDoc(doc(firestoreDB, 'users', rider._id), {
+          fareDue: false
+        });
+        updatedRiders[i].status = "Cancelled";
+        await updateDoc(rideRef, { Riders: updatedRiders });
+      console.log('Rider status updated successfully to "cancelled"');
+      }
+      }
+
+      
       const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
       await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
       navigation.navigate('RequestCreation')
@@ -497,19 +542,22 @@ const DuringRideHost = () => {
                   <View>
                     <View style={styles.callChatIcons}>
                       <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', rider) }}>
-                        <Icon style={styles.iconButton} name="comment-dots" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                        <Icon style={[styles.iconButton,{marginVertical: 0, padding: 7}]} name="comment-dots" type="font-awesome-5" size={20} color={GlobalColors.primary} />
                       </TouchableOpacity>
                       {rider.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${rider.phoneNumber}`) }}>
-                        <Icon style={styles.iconButton} name="phone-alt" type="font-awesome-5" size={25} color={GlobalColors.primary} />
+                        <Icon style={[styles.iconButton,{marginVertical: 0, padding: 7}]} name="phone-alt" type="font-awesome-5" size={20} color={GlobalColors.primary} />
                       </TouchableOpacity>}
                     </View>
+                    <TouchableOpacity style={[styles.cancelButton,{marginTop:0, padding:4}]} onPress={cancelRider(rider)}>
+                      <Text style={[styles.cancelButtonText, {fontSize: 15}]}>Cancel</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))}
             </Animated.View>
           </PanGestureHandler>)}
       </GestureHandlerRootView>
-      {showFeedback && <FeedbackHost riders={riders} visible={true} />}
+      {showFeedback && <FeedbackHost riders={[riders]} visible={true} />}
     </>
   );
 }

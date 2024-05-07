@@ -63,7 +63,7 @@ const RequestCreationScreen = () => {
         })
     );
     const [schedule, setSchedule] = useState(null);
-    const currentUser = {_id: 'dd'}//useSelector((state) => state.user.user);
+    const currentUser = useSelector((state) => state.user.user);
 
     useEffect(() => {
         (async () => {

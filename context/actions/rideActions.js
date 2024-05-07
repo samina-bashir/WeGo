@@ -57,6 +57,11 @@ export const setRideDetails = (details) => ({
     type: 'SET_WAYPOINTS',
     payload: wayPoints,
   });
+
+  export const setConfirmedWayPoints = (wayPoints) => ({
+    type: 'SET_CONFIRMED_WAYPOINTS',
+    payload: wayPoints,
+  });
   
   export const setLocation = (location) => ({
     type: 'SET_LOCATION',

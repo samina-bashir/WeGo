@@ -246,11 +246,11 @@ const FindRiderScreen = () => {
             <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> From: {item.from} </Text>
+                    <Text style={styles.text}> From: {item.from.name} </Text>
                 </View>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> To: {item.to} </Text>
+                    <Text style={styles.text}> To: {item.to.name} </Text>
                 </View>
             </View>
             <View style={{ flexDirection: 'row' }}>

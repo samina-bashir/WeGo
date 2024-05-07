@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux';
 export default function FeedbackHost(props) {
   const [riderRating, setRiderRating] = useState(Array(props.riders.length).fill(0));
   const [riderFeedbacks, setRiderFeedbacks] = useState(Array(props.riders.length).fill(''));
-  const [isOverlayVisible, setOverlayVisible] = useState(true);
+  const [isOverlayVisible, setOverlayVisible] = useState(props.visible);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
   const currentUser = useSelector((state) => state.user.user);
@@ -35,7 +35,7 @@ export default function FeedbackHost(props) {
     } catch (error) {
       console.log('Error updating ride status: ', error)
     }
-    navigation.navigate('RequestCreation');
+    setOverlayVisible(false)
   };
 
   const addRiderMessage = (index, message) => {
@@ -167,7 +167,7 @@ export default function FeedbackHost(props) {
 
   return (
     <Overlay
-      isVisible={props.visible}
+      isVisible={isOverlayVisible}
       overlayStyle={[styles.overlay, { height: overlayHeight }]}
     >
       <View style={styles.column}>

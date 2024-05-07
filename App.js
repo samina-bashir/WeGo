@@ -29,7 +29,7 @@ import FindScheduledRider from './screens/FindScheduledRider.js';
 import EditProfile from './screens/EditProfile.js';
 import SetLocationScreen from './screens/SetLocation.js';
 import * as TaskManager from 'expo-task-manager'
-import { setLocation } from './context/actions/rideActions.js';
+import { setLocation, setConfirmedWayPoints } from './context/actions/rideActions.js';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { createRef } from 'react';
@@ -39,12 +39,12 @@ const Stack = createNativeStackNavigator();
 const STRIPE_KEY = 'pk_test_51Oq889GhYfHmgwjRnwEFkCvCQ2gQw5mBEZEXyaHdTOZYllWWlEfD7CQDbOSeBjgitc6AT9R3h1dgzuAepP3wjSU2009yA0vsuy'
 const YOUR_TASK_NAME = 'background-location-task';
 
-async function schedulePushNotification() {
+async function schedulePushNotification(waypoint) {
   await Notifications.scheduleNotificationAsync({
     content: {
       sound: 'default',
-      title: "You've got mail! 📬",
-      body: 'Here is the notification body',
+      title: `${waypoint.type} Stop`,
+      body: `You have almost reached ${waypoint.type} Stop for ${waypoint.riderName}. Click to confirm ${waypoint.type}`,
       data: { data: 'goes here' },
     },
     trigger: { seconds: 1 },
@@ -112,7 +112,7 @@ TaskManager.defineTask(YOUR_TASK_NAME, async ({ data, error }) => {
 
   // Dispatch your setLocation action using the imported function
   Store.dispatch(setLocation(validLocations[0]));
-  
+
   const waypoints = Store.getState().ride.wayPoints;
 
   // Loop through waypoints and check if any are near the current location
@@ -134,13 +134,18 @@ TaskManager.defineTask(YOUR_TASK_NAME, async ({ data, error }) => {
           console.log(response);
         });
 
-        schedulePushNotification();
-
+        schedulePushNotification(waypoint);
+        const confirmedWaypoints = [...Store.getState().ride.confirmedWayPoints];
+        const lastWaypoint = confirmedWaypoints[confirmedWaypoints.length - 1];
+        if (!lastWaypoint || lastWaypoint[1] === true) {
+          confirmedWaypoints.push([waypoint, false]);
+        }
+        Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
       } else {
         console.log('bassss')
       }
     });
-  }else {console.log('no way')}
+  } else { console.log('no way') }
 
 });
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -166,12 +171,11 @@ export default function App() {
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
             <Stack.Screen name="DuringRide" component={DuringRideScreen} />
             <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
             <Stack.Screen name="SetLocation" component={SetLocationScreen} />
-            
+            <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="FindScheduledRider" component={FindScheduledRider} />
             <Stack.Screen name="FindScheduledHost" component={FindScheduledHost} />
             <Stack.Screen name="PayFare" component={PayFare} />
