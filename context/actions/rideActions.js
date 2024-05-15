@@ -62,10 +62,29 @@ export const setRideDetails = (details) => ({
     type: 'SET_CONFIRMED_WAYPOINTS',
     payload: wayPoints,
   });
+
+  export const setCancelledByMe = (cancelled) => ({
+    type: 'SET_CANCELLED_BY_ME',
+    payload: cancelled,
+  });
+
+  export const setCancelledRiders = (cancelledRiders) => ({
+    type: 'SET_CANCELLED_RIDERS',
+    payload: cancelledRiders,
+  });
   
   export const setLocation = (location) => ({
     type: 'SET_LOCATION',
     payload: location,
   });
-  // Add other action creators if needed
-  
+
+  export const setRideEnded = (ended) => ({
+    type: 'SET_RIDE_ENDED',
+    payload: ended,
+  });
+
+  export const setShowDirections = (directions) => ({
+    type: 'SET_SHOW_DIRECTIONS',
+    payload: directions,
+  });
+   

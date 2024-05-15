@@ -12,7 +12,11 @@ const initialState = {
     coriders: [],
     wayPoints: [],
     confirmedWayPoints: [],
-    location: null
+    location: null,
+    cancelledRiders: [],
+    cancelledByMe: false,
+    rideEnded: false,
+    showDirections: false
     // Add other ride-related state properties if needed
 };
 
@@ -83,10 +87,30 @@ const rideReducer = (state = initialState, action) => {
                 ...state,
                 confirmedWayPoints: action.payload,
             };
+        case 'SET_CANCELLED_BY_ME':
+            return {
+                ...state,
+                cancelledByMe: action.payload,
+            };
+        case 'SET_CANCELLED_RIDERS':
+            return {
+                ...state,
+                cancelledRiders: action.payload,
+            };
         case 'SET_LOCATION':
             return {
                 ...state,
                 location: action.payload,
+            };
+        case 'SET_RIDE_ENDED':
+            return {
+                ...state,
+                rideEnded: action.payload,
+            };
+        case 'SET_SHOW_DIRECTIONS':
+            return {
+                ...state,
+                showDirections: action.payload,
             };
         default:
             return state;

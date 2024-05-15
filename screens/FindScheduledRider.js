@@ -106,7 +106,7 @@ const FindScheduledRider = () => {
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {
-            const responseRef = doc(firestoreDB, 'responsesHost', selectedRequestId);
+            const responseRef = doc(firestoreDB, 'responsesScheduledHost', selectedRequestId);
             const unsubscribe = onSnapshot(responseRef, (doc) => {
                 if (doc.exists()) {
                     const responseData = doc.data();

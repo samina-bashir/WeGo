@@ -40,14 +40,32 @@ const DuringRideScreen = () => {
   const driverInfo = useSelector(state => state.ride.driverInfo);
   const coriders = useSelector(state => state.ride.coriders);
   const wayPoints = useSelector(state => state.ride.wayPoints);
+  const cancelledByMe = useSelector(state => state.ride.cancelledByMe);
   const navigation = useNavigation();
   const [driverData, setDriverData] = useState(null);
   const [rerouteLocation, setRerouteLocation] = useState(null);
+  const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
   const YOUR_TASK_NAME = 'background-location-task';
   const dispatch = useDispatch();
+  const [timeLeft, setTimeLeft] = useState(5 * 60);
+  const [showTimerPopup, setShowTimerPopup] = useState(false);
+  const setTimer =()=> {
+    setShowTimerPopup(true)
+    const interval = setInterval(() => {
+      setTimeLeft((prevTimeLeft) => {
+        if (prevTimeLeft === 0) {
+          clearInterval(interval);
+          return prevTimeLeft;
+        }
+        return prevTimeLeft - 1;
+      });
+    }, 1000);
+    setShowTimerPopup(false)
+    return () => clearInterval(interval);
+  }
 
   const requestLocationPermissions = async () => {
     try {
@@ -266,6 +284,20 @@ const DuringRideScreen = () => {
           for (const rider of rideData.Riders) {
             if (rider.status == 'Cancelled') {
               console.log('rider is out')
+              if(rider.rider==currentUser._id && !cancelledByMe){
+                Alert.alert(
+                  'Ride Cancelled',
+                  `Unfortunately, your Host ${userData.name} has cancelled the ride.`,
+                  [
+                    {
+                      text: 'Acknowledge',
+                      onPress: () => {
+                        navigation.navigate('Request Creation')
+                      }
+                    }
+                  ]
+                );
+              }
               continue;
             }
 
@@ -300,7 +332,7 @@ const DuringRideScreen = () => {
               wp.push(rider.to)
             }
           }
-
+          dispatch(setRideDetails(rideData))
           dispatch(setFromRideLocation(rideData.from));
           dispatch(setToRideLocation(rideData.to));
           dispatch(setDriverInfo(driverInfoData));
@@ -322,13 +354,11 @@ const DuringRideScreen = () => {
 
   const cancelRide = async () => {
     try {
-      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
-      const rideSnapshot = await getDoc(rideRef);
-      const rideData = rideSnapshot.data();
-      const currentUserIndex = rideData.Riders.findIndex(rider => rider.rider === currentUser._id);
-
+      
+      const currentUserIndex = rideDetails.Riders.findIndex(rider => rider.rider === currentUser._id);
+      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
       if (currentUserIndex !== -1) {
-        const updatedRiders = [...rideData.Riders];
+        const updatedRiders = [...rideDetails.Riders];
         updatedRiders[currentUserIndex].status = "Cancelled";
         await updateDoc(rideRef, { Riders: updatedRiders });
 
@@ -338,9 +368,30 @@ const DuringRideScreen = () => {
       }
 
       console.log('Ride status updated successfully to "cancelled"');
-      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
-      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1, fareDue: false });
+      if (rideDetails.schedule) {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0 (Sunday) through 6 (Saturday)
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
 
+        const time = hours * 60 + minutes;
+        const currentDayName = dayIndexToName[dayOfWeek];
+        var penalty = false;
+        if (schedule[currentDayName]) {
+          const Other = schedule[currentDayName]['Other'];
+          const Return = schedule[currentDayName]['Return'];
+          const pickupTime = parseTime(Other);
+          const dropOffTime = parseTime(Return);
+          const scheduledTime = time <= pickupTime ? pickupTime : dropOffTime;
+          penalty = time > scheduledTime - 720;
+        }
+      } else {
+          penalty = (Timestamp.now() - rideDetails.created) > (5 * 60 * 1000)
+      }
+      if (penalty) {
+        const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+        await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      }
       navigation.navigate('RequestCreation')
     } catch (error) {
       console.error('Error updating ride status:', error);
@@ -372,6 +423,11 @@ const DuringRideScreen = () => {
     return `${hours}h ${minutes}m`;
   };
 
+  const parseTime = (timeStr) => {
+    const [hours, minutes] = timeStr.split(':');
+    return parseInt(hours, 10) * 60 + parseInt(minutes, 10);
+  };
+
   return (
     <>
       <GestureHandlerRootView style={styles.container}>
@@ -380,7 +436,10 @@ const DuringRideScreen = () => {
           <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft: 'auto', paddingVertical: 7, paddingHorizontal: 15 }}>Estimated Time: {formatDuration(duration)}</Text>
 
         </View>
-
+        {showTimerPopup &&
+        <View style={{ padding: 20, borderRadius: 10 }}>
+          <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft:'auto'}}>Waiting Time: {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? `0${timeLeft % 60}` : timeLeft % 60}</Text>
+        </View>}
         <MapView
           ref={mapRef}
           style={styles.map}

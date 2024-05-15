@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Animated, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, Linking, ActivityIndicator, Alert } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import styles from '../styles/globalStyles';
@@ -7,12 +7,12 @@ import GlobalColors from '../styles/globalColors';
 import { Icon, Avatar } from 'react-native-elements';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { firestoreDB } from '../config/firebase.config';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { collection } from 'firebase/firestore';
 import FeedbackHost from '../components/FeedbackHost';
 import { useSelector, useDispatch } from 'react-redux';
 import * as Location from 'expo-location';
-import { setLoading, setConfirmedWayPoints, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints } from '../context/actions/rideActions';
+import { setLoading, setConfirmedWayPoints, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints, setCancelledByMe, setCancelledRiders, setRideEnded, setShowDirections } from '../context/actions/rideActions';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import MapViewDirections from 'react-native-maps-directions';
@@ -31,7 +31,7 @@ Notifications.setNotificationHandler({
 const DuringRideHost = () => {
   const [showFeedback, setShowFeedback] = useState(false)
   const [isMapReady, setIsMapReady] = useState(false);
-  const [rideDetailsHeight, setRideDetailsHeight] = useState(200);
+  const [rideDetailsHeight, setRideDetailsHeight] = useState(190);
 
   const initialRegion = {
     latitude: 31.480864,
@@ -46,21 +46,27 @@ const DuringRideHost = () => {
   const duration = useSelector(state => state.ride.duration);
   const fromRideLocation = useSelector(state => state.ride.fromRideLocation);
   const toRideLocation = useSelector(state => state.ride.toRideLocation);
-  const fare = useSelector(state => state.ride.fare);
+  const cancelledByMe = useSelector(state => state.ride.cancelledByMe);
   const riders = useSelector(state => state.ride.coriders);
   const wayPoints = useSelector(state => state.ride.wayPoints);
   const confirmedWaypoints = useSelector(state => state.ride.confirmedWayPoints);
+  const cancelledRiders = useSelector(state => state.ride.cancelledRiders);
+  const showDirection = useSelector(state => state.ride.showDirections);
   const navigation = useNavigation();
   const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
-  const YOUR_TASK_NAME = 'background-location-task';
+  const YOUR_TASK_NAME = 'host-background-location-task';
   const dispatch = useDispatch();
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(false);
   const [rerouteLocation, setRerouteLocation] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(5 * 60);
+  const [showTimerPopup, setShowTimerPopup] = useState(true);
   const notificationListener = useRef();
   const responseListener = useRef();
+  const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
@@ -146,7 +152,7 @@ const DuringRideHost = () => {
     }
 
     try {
-    //  await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
+      await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
       //  await registerBackgroundFetchAsync()
       console.log('Started receiving location updates.');
     } catch (error) {
@@ -159,10 +165,19 @@ const DuringRideHost = () => {
     dispatch(setDuration(result.duration));
     adjustMapViewport(fromRideLocation, toRideLocation);
   };
-
+  useEffect(() => {
+    console.log('alert')
+    confirmWayPoint();
+  }, [confirmedWaypoints, location]);
   const confirmWayPoint = () => {
+    console.log('During ride host', confirmedWaypoints)
     if (confirmedWaypoints.length > 0 && !confirmedWaypoints[confirmedWaypoints.length - 1][1]) {
       const wp = confirmedWaypoints[confirmedWaypoints.length - 1][0]
+      if (!wp.riderName) {  //it is to rideLocation
+        setShowFeedback(true);
+        dispatch(setRideEnded(true))
+        return;
+      }
       // Display alert to confirm waypoint
       Alert.alert(
         `Confirm ${wp.type}`,
@@ -176,12 +191,14 @@ const DuringRideHost = () => {
               updatedWaypoints[confirmedWaypoints.length - 1][1] = true;
               dispatch(setConfirmedWayPoints(updatedWaypoints));
               // Navigate to next
+              if (showDirection){
               const index = wayPoints.findIndex(w => w === wp);
               if (index == -1) {
                 Linking.openURL(`google.navigation:q=${toRideLocation.latitude},${toRideLocation.longitude}&mode=d`)
               } else {
                 Linking.openURL(`google.navigation:q=${wayPoints[index].latitude},${wayPoints[index].longitude}&mode=d`)
               }
+            }
             },
           },
         ],
@@ -274,6 +291,7 @@ const DuringRideHost = () => {
       }
     )
   };
+
   useEffect(() => {
     // Call the function to start receiving location updates
     startLocationUpdates();
@@ -287,15 +305,33 @@ const DuringRideHost = () => {
           try {
             const rideData = rideSnapshot.data();
             if (!rideData) {
-              console.error('Ride data is null or undefined.');
+              console.log('Ride data is null or undefined.');
               return;
             }
+            rideData.id = rideSnapshot.id;
+            console.log("Ride Data:", rideData);
             console.log(rideData)
             let wp = [];
             const ridersData = [];
             for (const rider of rideData.Riders) {
-              if (rider.status == 'Cancelled') {
-                console.log('rider is out')
+              if (rider.status === 'Cancelled') {
+                if (!cancelledByMe && !cancelledRiders.includes(rider.rider)) {
+                  console.log('Rider has cancelled the ride');
+                  dispatch(setCancelledRiders([...cancelledRiders, rider.rider]))
+                  const riderDocRef = doc(collection(firestoreDB, 'users'), rider.rider);
+                  try {
+                    const riderSnapshot = await getDoc(riderDocRef);
+                    const riderData = riderSnapshot.data();
+                    if (riderData) {
+                      Alert.alert('Rider Cancelled', `${riderData.name} has cancelled the ride.`);
+                    } else {
+                      console.error(`Rider data not found for rider ID: ${rider.rider}`);
+                    }
+                  } catch (error) {
+                    console.error('Error fetching rider data:', error);
+                  }
+
+                }
                 continue;
               }
 
@@ -320,6 +356,7 @@ const DuringRideHost = () => {
                 }
               }
             }
+            dispatch(setRideDetails(rideData));
             dispatch(setWayPoints(wp));
             dispatch(setCoriders(ridersData));
             dispatch(setFromRideLocation(rideData.from));
@@ -347,12 +384,11 @@ const DuringRideHost = () => {
 
   const cancelRide = async () => {
     try {
-      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
-      const rideSnapshot = await getDoc(rideRef);
-      const rideData = rideSnapshot.data();
-      const updatedRiders = [...rideData.Riders];
-      for (let i = 0; i < rideData.Riders.length; i++) {
-        const rider = rideData.Riders[i];
+      dispatch(setCancelledByMe(true))
+      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+      const updatedRiders = [...rideDetails.Riders];
+      for (let i = 0; i < rideDetails.Riders.length; i++) {
+        const rider = rideDetails.Riders[i];
         await updateDoc(doc(firestoreDB, 'users', rider.rider), {
           fareDue: false
         });
@@ -361,8 +397,30 @@ const DuringRideHost = () => {
 
       await updateDoc(rideRef, { Riders: updatedRiders });
       console.log('Ride status updated successfully to "cancelled"');
-      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
-      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      if (rideDetails.schedule) {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0 (Sunday) through 6 (Saturday)
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+
+        const time = hours * 60 + minutes;
+        const currentDayName = dayIndexToName[dayOfWeek];
+        var penalty = false;
+        if (schedule[currentDayName]) {
+          const Other = schedule[currentDayName]['Other'];
+          const Return = schedule[currentDayName]['Return'];
+          const pickupTime = parseTime(Other);
+          const dropOffTime = parseTime(Return);
+          const scheduledTime = time <= pickupTime ? pickupTime : dropOffTime;
+          penalty = time > scheduledTime - 720;
+        }
+      } else {
+        penalty = (Timestamp.now() - rideDetails.created) > (5 * 60 * 1000)
+      }
+      if (penalty) {
+        const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+        await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      }
       navigation.navigate('RequestCreation')
     } catch (error) {
       console.error('Error updating ride status:', error);
@@ -371,25 +429,44 @@ const DuringRideHost = () => {
 
   const cancelRider = async (rider) => {
     try {
-      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
-      const rideSnapshot = await getDoc(rideRef);
-      const rideData = rideSnapshot.data();
-      const updatedRiders = [...rideData.Riders];
-      for (let i = 0; i < rideData.Riders.length; i++) {
-        if (rider._id == rideData.Riders[i]){
-        await updateDoc(doc(firestoreDB, 'users', rider._id), {
-          fareDue: false
-        });
-        updatedRiders[i].status = "Cancelled";
-        await updateDoc(rideRef, { Riders: updatedRiders });
-      console.log('Rider status updated successfully to "cancelled"');
-      }
+      dispatch(setCancelledRiders([...cancelledRiders, rider._id]))
+      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+      const updatedRiders = [...rideDetails.Riders];
+      for (let i = 0; i < rideDetails.Riders.length; i++) {
+        if (rider._id == rideDetails.Riders[i]) {
+          await updateDoc(doc(firestoreDB, 'users', rider._id), {
+            fareDue: false
+          });
+          updatedRiders[i].status = "Cancelled";
+          await updateDoc(rideRef, { Riders: updatedRiders });
+          console.log('Rider status updated successfully to "cancelled"');
+        }
       }
 
-      
-      const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
-      await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
-      navigation.navigate('RequestCreation')
+      if (rideDetails.schedule) {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0 (Sunday) through 6 (Saturday)
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+
+        const time = hours * 60 + minutes;
+        const currentDayName = dayIndexToName[dayOfWeek];
+        var penalty = false;
+        if (schedule[currentDayName]) {
+          const Other = schedule[currentDayName]['Other'];
+          const Return = schedule[currentDayName]['Return'];
+          const pickupTime = parseTime(Other);
+          const dropOffTime = parseTime(Return);
+          const scheduledTime = time <= pickupTime ? pickupTime : dropOffTime;
+          penalty = time > scheduledTime - 720;
+        }
+      } else {
+        penalty = (Timestamp.now() - rideDetails.created) > (5 * 60 * 1000)
+      }
+      if (penalty) {
+        const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
+        await updateDoc(userRef, { cancelledRides: currentUser.cancelledRides + 1 });
+      }
     } catch (error) {
       console.error('Error updating ride status:', error);
     }
@@ -400,6 +477,7 @@ const DuringRideHost = () => {
   };
 
   const showDirections = () => {
+    dispatch(setShowDirections(true))
     Linking.openURL(`google.navigation:q=${wayPoints[0].latitude},${wayPoints[0].longitude}&mode=d`)
   }
 
@@ -408,15 +486,34 @@ const DuringRideHost = () => {
     const newHeight = rideDetailsHeight + offsetY;
 
     if (event.nativeEvent.state === State.ACTIVE) {
-      if (newHeight <= 200) {
-        setRideDetailsHeight(200);
+      if (newHeight <= 190) {
+        setRideDetailsHeight(190);
       } else if (newHeight >= 500) {
         setRideDetailsHeight(500);
-      } else if (newHeight >= 200 && newHeight <= 500) {
+      } else if (newHeight >= 190 && newHeight <= 500) {
         setRideDetailsHeight(newHeight);
       }
     }
   };
+
+  const parseTime = (timeStr) => {
+    const [hours, minutes] = timeStr.split(':');
+    return parseInt(hours, 10) * 60 + parseInt(minutes, 10);
+  };
+
+  useEffect(() => {
+    setTimer();
+  }, []);
+  const setTimer = () => {
+    setShowTimerPopup(true)
+    setTimeLeft(1 * 60)
+    const interval = setInterval(() => {
+      setTimeLeft((prevTimeLeft) => {
+        return prevTimeLeft - 1;
+      });
+    }, 1000)
+    return () => clearInterval(interval);
+  }
 
   return (
     <>
@@ -427,6 +524,15 @@ const DuringRideHost = () => {
           <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft: 'auto', paddingVertical: 7, paddingHorizontal: 15 }}>Estimated Time: {formatDuration(duration)}</Text>
 
         </View>
+        {showTimerPopup &&
+          <View style={{ backgroundColor: 'red', padding: 10, borderRadius: 10 }}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: GlobalColors.background, marginLeft: 'auto' }}>
+              Waiting Time: 
+              {timeLeft >= 0 ?
+                ` 0${Math.floor(timeLeft / 60)}:${timeLeft % 60 < 10 ? `0${timeLeft % 60}` : timeLeft % 60}` :
+                ` -0${Math.abs(Math.floor(-1*timeLeft / 60))}:${Math.abs(timeLeft % 60) < 10 ? `0${Math.abs(timeLeft % 60)}` : Math.abs(timeLeft % 60)}`}
+            </Text>
+          </View>}
         <MapView
           ref={mapRef}
           style={styles.map}
@@ -495,13 +601,13 @@ const DuringRideHost = () => {
 
           )}
         </MapView>
-        <TouchableOpacity onPress={() => adjustMapViewport(fromRideLocation, toRideLocation)} style={{ position: 'absolute', left: 45, paddingTop: 75, paddingHorizontal: 5 }}>
+        <TouchableOpacity onPress={() => adjustMapViewport(fromRideLocation, toRideLocation)} style={{ position: 'absolute', left: 8, paddingTop: showTimerPopup ? 120 : 70, paddingHorizontal: 5 }}>
           <Icon name='street-view' type='font-awesome-5' size={30} color={GlobalColors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={async () => setRerouteLocation(location.coords)} style={{ position: 'absolute', left: 80, paddingTop: 75, paddingHorizontal: 5 }}>
+        <TouchableOpacity onPress={async () => setRerouteLocation(location.coords)} style={{ position: 'absolute', left: 45, paddingTop: showTimerPopup ? 120 : 70, paddingHorizontal: 5 }}>
           <Icon name='route' type='font-awesome-5' size={30} color={GlobalColors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => showDirections()} style={{ position: 'absolute', left: 115, paddingTop: 75, paddingHorizontal: 5 }}>
+        <TouchableOpacity onPress={() => showDirections()} style={{ position: 'absolute', left: 80, paddingTop: showTimerPopup ? 120 : 70, paddingHorizontal: 5 }}>
           <Icon name='directions' type='font-awesome-5' size={30} color={GlobalColors.primary} />
         </TouchableOpacity>
         {isLoading ? (
@@ -518,7 +624,7 @@ const DuringRideHost = () => {
                 <Text style={styles.locationText}> To: {toRideLocation?.name} </Text>
               </View>
 
-              <TouchableOpacity style={styles.cancelButton} onPress={cancelRide}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => { cancelRide }}>
                 <Text style={styles.cancelButtonText}>CANCEL RIDE</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => { setRideDetailsHeight(200 + 70 * riders.length) }}>
@@ -542,14 +648,14 @@ const DuringRideHost = () => {
                   <View>
                     <View style={styles.callChatIcons}>
                       <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', rider) }}>
-                        <Icon style={[styles.iconButton,{marginVertical: 0, padding: 7}]} name="comment-dots" type="font-awesome-5" size={20} color={GlobalColors.primary} />
+                        <Icon style={[styles.iconButton, { marginVertical: 0, padding: 7 }]} name="comment-dots" type="font-awesome-5" size={20} color={GlobalColors.primary} />
                       </TouchableOpacity>
                       {rider.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${rider.phoneNumber}`) }}>
-                        <Icon style={[styles.iconButton,{marginVertical: 0, padding: 7}]} name="phone-alt" type="font-awesome-5" size={20} color={GlobalColors.primary} />
+                        <Icon style={[styles.iconButton, { marginVertical: 0, padding: 7 }]} name="phone-alt" type="font-awesome-5" size={20} color={GlobalColors.primary} />
                       </TouchableOpacity>}
                     </View>
-                    <TouchableOpacity style={[styles.cancelButton,{marginTop:0, padding:4}]} onPress={cancelRider(rider)}>
-                      <Text style={[styles.cancelButtonText, {fontSize: 15}]}>Cancel</Text>
+                    <TouchableOpacity style={[styles.cancelButton, { marginTop: 0, padding: 4 }]} onPress={() => { cancelRider(rider) }}>
+                      <Text style={[styles.cancelButtonText, { fontSize: 15 }]}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -557,7 +663,8 @@ const DuringRideHost = () => {
             </Animated.View>
           </PanGestureHandler>)}
       </GestureHandlerRootView>
-      {showFeedback && <FeedbackHost riders={[riders]} visible={true} />}
+      {showFeedback && <FeedbackHost riders={riders} visible={showFeedback} />}
+
     </>
   );
 }

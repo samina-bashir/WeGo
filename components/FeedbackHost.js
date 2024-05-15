@@ -14,7 +14,7 @@ export default function FeedbackHost(props) {
   const [isOverlayVisible, setOverlayVisible] = useState(props.visible);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
-  const currentUser = useSelector((state) => state.user.user);
+  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' }//useSelector((state) => state.user.user);
 
   useEffect(() => {
     if (feedbackSent.length === props.riders.length && props.riders.length != 0) {
@@ -35,7 +35,7 @@ export default function FeedbackHost(props) {
     } catch (error) {
       console.log('Error updating ride status: ', error)
     }
-    setOverlayVisible(false)
+    navigation.navigate('RequestCreation')
   };
 
   const addRiderMessage = (index, message) => {
@@ -67,7 +67,7 @@ export default function FeedbackHost(props) {
     return props.riders.map((rider, index) => (
       <View key={index}>
         <View style={styles.row}>
-          <Text style={styles.name}>{rider.name}</Text>
+          <Text style={styles.name}>{rider?.name}</Text>
           <View pointerEvents={feedbackSent.includes(index) ? 'none' : 'auto'} style={{ marginLeft: 'auto', paddingVertical: 10 }}>
             <Rating
               type="star"
@@ -77,12 +77,15 @@ export default function FeedbackHost(props) {
                 const updatedRiderRatings = [...riderRating];
                 updatedRiderRatings[index] = rating;
                 setRiderRating(updatedRiderRatings);
+                console.log(rider)
+                console.log('tider')
               }}
             />
           </View>
         </View>
         <Text style={styles.feedback}>feedback</Text>
         <View style={styles.row}>
+
           <TextInput
             placeholder={`How was ${rider.name}?`}
             containerStyle={{ flex: 1, height: 50, padding: 15, backgroundColor: 'black' }}

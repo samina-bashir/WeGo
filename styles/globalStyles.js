@@ -110,6 +110,22 @@ const styles = StyleSheet.create({
     color: 'blue',
     fontSize: 16,
   },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalView: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  timerText: {
+    fontSize: 30,
+    marginBottom: 20,
+  },
   overlay: {
     width: 300,
     height: 400,

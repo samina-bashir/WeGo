@@ -1,4 +1,3 @@
-import { StatusBar } from 'expo-status-bar';
 import DuringRideScreen from './screens/DuringRide';
 import ChatScreen from './screens/chatScreen';
 import RequestCreationScreen from './screens/RequestCreation';
@@ -33,18 +32,32 @@ import { setLocation, setConfirmedWayPoints } from './context/actions/rideAction
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { createRef } from 'react';
+import { firestoreDB } from './config/firebase.config.js';
+import { Timestamp, doc, updateDoc } from 'firebase/firestore';
 LogBox.ignoreLogs(['Warning: ...']); // Ignore log notification by message
 LogBox.ignoreAllLogs();
 const Stack = createNativeStackNavigator();
 const STRIPE_KEY = 'pk_test_51Oq889GhYfHmgwjRnwEFkCvCQ2gQw5mBEZEXyaHdTOZYllWWlEfD7CQDbOSeBjgitc6AT9R3h1dgzuAepP3wjSU2009yA0vsuy'
-const YOUR_TASK_NAME = 'background-location-task';
-
+const HOST_TASK = 'host-background-location-task';
+const RIDER_TASK = 'rider-background-location-task';
 async function schedulePushNotification(waypoint) {
   await Notifications.scheduleNotificationAsync({
     content: {
       sound: 'default',
       title: `${waypoint.type} Stop`,
       body: `You have almost reached ${waypoint.type} Stop for ${waypoint.riderName}. Click to confirm ${waypoint.type}`,
+      data: { data: 'goes here' },
+    },
+    trigger: { seconds: 1 },
+  });
+}
+
+async function scheduleEndNotification(toLocation) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      sound: 'default',
+      title: `Ride Ended`,
+      body: `You have almost reached end of your ride. Click to give feedback.`,
       data: { data: 'goes here' },
     },
     trigger: { seconds: 1 },
@@ -81,9 +94,32 @@ async function registerForPushNotificationsAsync() {
 
   return token;
 }
+function objectsAreEqual(obj1, obj2) {
+  // Get the keys of each object
+  const obj1Keys = Object.keys(obj1);
+  const obj2Keys = Object.keys(obj2);
+
+  // Check if the number of keys is the same
+  if (obj1Keys.length !== obj2Keys.length) {
+    return false;
+  }
+
+  // Iterate over each key in obj1
+  for (let key of obj1Keys) {
+    // Check if the corresponding key exists in obj2 and if their values are equal
+    if (!(key in obj2) || obj1[key] !== obj2[key]) {
+      return false;
+    }
+  }
+
+  // If all keys and values are equal, return true
+  return true;
+}
 const notificationListener = createRef();
 const responseListener = createRef();
-TaskManager.defineTask(YOUR_TASK_NAME, async ({ data, error }) => {
+TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
+  const rideEnded = Store.getState().ride.rideEnded
+  if (!rideEnded)
   if (error) {
     console.error('Error in background location task:', error.message);
     return;
@@ -109,19 +145,26 @@ TaskManager.defineTask(YOUR_TASK_NAME, async ({ data, error }) => {
   }
 
   console.log('Received new valid locations:', validLocations);
-
+  const lastIndex = validLocations.length - 1;
+  const currentLocation = validLocations[lastIndex];
   // Dispatch your setLocation action using the imported function
-  Store.dispatch(setLocation(validLocations[0]));
-
+  Store.dispatch(setLocation(currentLocation));
+  if (Store.getState().ride.rideDetails) {
+    await updateDoc(doc(firestoreDB, 'ride', Store.getState().ride.rideDetails.id), {
+      location: currentLocation
+    });
+  }
   const waypoints = Store.getState().ride.wayPoints;
-
+  const toLocation = Store.getState().ride.toRideLocation;
+  const showDirections = Store.getState().ride.showDirections;
   // Loop through waypoints and check if any are near the current location
-  const currentLocation = validLocations[0];
   const proximityThreshold = 333334.01;
+  
   if (waypoints) {
-    console.log('fine')
+    console.log('fine', waypoints)
     waypoints.forEach(waypoint => {
       const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, waypoint?.latitude, waypoint.longitude);
+      console.log(distance)
       if (distance < proximityThreshold) {
         console.log(`Waypoint ${waypoint.name} is near the current location.`);
         registerForPushNotificationsAsync();
@@ -134,13 +177,145 @@ TaskManager.defineTask(YOUR_TASK_NAME, async ({ data, error }) => {
           console.log(response);
         });
 
-        schedulePushNotification(waypoint);
+
         const confirmedWaypoints = [...Store.getState().ride.confirmedWayPoints];
+        console.log('confirmed', confirmedWaypoints)
+        console.log('current', waypoint)
         const lastWaypoint = confirmedWaypoints[confirmedWaypoints.length - 1];
+        console.log(lastWaypoint)
         if (!lastWaypoint || lastWaypoint[1] === true) {
-          confirmedWaypoints.push([waypoint, false]);
+          var isAlreadyConfirmed = false;
+          console.log('loop range', confirmedWaypoints.length)
+          for (let i = 0; i < confirmedWaypoints.length; i++) {
+            console.log('loop', i, confirmedWaypoints[i][0])
+            console.log(confirmedWaypoints[i][0])
+            console.log(waypoint)
+            console.log(objectsAreEqual(confirmedWaypoints[i][0], waypoint))
+            if (objectsAreEqual(confirmedWaypoints[i][0], waypoint)) {
+              isAlreadyConfirmed = true;
+              break;
+            }
+          }
+          if (!isAlreadyConfirmed) {
+            confirmedWaypoints.push([waypoint, false, Timestamp.now(), false]);
+            Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
+            if(showDirections){
+            schedulePushNotification(waypoint);
+            }
+          }
         }
-        Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
+
+      } else {
+        console.log('bassss')
+      }
+    });
+  } else { console.log('no way') }
+  if (toLocation) {
+    const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, toLocation.latitude, toLocation.longitude);
+    console.log(distance)
+    if (distance < proximityThreshold) {
+      console.log(`Ride end Location ${toLocation.name} is near the current location.`);
+      registerForPushNotificationsAsync();
+
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log(notification)
+      });
+
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log(response);
+      });
+
+
+      const confirmedWaypoints = [...Store.getState().ride.confirmedWayPoints];
+      console.log('confirmed', confirmedWaypoints)
+      const lastWaypoint = confirmedWaypoints[confirmedWaypoints.length - 1];
+      console.log('l',lastWaypoint)
+      if (!lastWaypoint || lastWaypoint[1] === true) {
+        var isAlreadyConfirmed = false;
+        console.log('loop range to', confirmedWaypoints.length)
+        for (let i = 0; i < confirmedWaypoints.length; i++) {
+          console.log('loop', i, confirmedWaypoints[i][0])
+          console.log(objectsAreEqual(confirmedWaypoints[i][0], toLocation))
+          if (objectsAreEqual(confirmedWaypoints[i][0], toLocation)) {
+            isAlreadyConfirmed = true;
+            break;
+          }
+        }
+        if (!isAlreadyConfirmed) {
+          confirmedWaypoints.push([toLocation, false, Timestamp.now(), false]);
+          Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
+          if(showDirections){
+          scheduleEndNotification(toLocation);
+          }
+        }
+      }
+    }
+  }
+
+});
+TaskManager.defineTask(RIDER_TASK, async ({ data, error }) => {
+  if (error) {
+    console.error('Error in background location task:', error.message);
+    return;
+  }
+  if (!data || !data.locations) {
+    console.error('Invalid data structure:', data);
+    return;
+  }
+
+  const { locations } = data;
+
+  if (!Array.isArray(locations)) {
+    console.error('Invalid locations data:', locations);
+    return;
+  }
+
+  // Assuming each location has a latitude property
+  const validLocations = locations.filter(location => location && location.coords?.latitude);
+
+  if (validLocations.length === 0) {
+    console.error('No valid locations found:', locations);
+    return;
+  }
+
+  console.log('Received new valid locations:', validLocations);
+  const lastIndex = validLocations.length - 1;
+  const currentLocation = validLocations[lastIndex];
+  // Dispatch your setLocation action using the imported function
+  Store.dispatch(setLocation(currentLocation));
+  await updateDoc(doc(firestoreDB, 'ride', Store.getState().ride.rideDetails.id), {
+    location: currentLocation
+  });
+  const waypoints = Store.getState().ride.wayPoints;
+
+  // Loop through waypoints and check if any are near the current location
+  const proximityThreshold = 333334.01;
+  if (waypoints) {
+    console.log('fine', waypoints)
+    waypoints.forEach(waypoint => {
+      const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, waypoint?.latitude, waypoint.longitude);
+      console.log(distance)
+      if (distance < proximityThreshold) {
+        registerForPushNotificationsAsync();
+
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+          console.log(notification)
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+          console.log(response);
+        });
+
+        currentUser = Store.getState().user.user._id
+        if (Store.getState().ride.rideDetails) {
+          const rideDetails = [...Store.getState().ride.rideDetails];
+          const currentUserIndex = rideDetails.Riders.findIndex(rider => rider.rider === currentUser._id);
+          const updatedRiders = [...rideDetails.Riders];
+          updatedRiders[currentUserIndex].location = currentLocation;
+          const rideRef = doc(collection(firestoreDB, 'ride'), Store.getState().ride.rideDetails.id);
+          updateDoc(rideRef, { Riders: updatedRiders });
+        }
+
       } else {
         console.log('bassss')
       }
@@ -166,7 +341,6 @@ function deg2rad(deg) {
 }
 export default function App() {
   return (
-
     <NavigationContainer>
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
@@ -190,7 +364,6 @@ export default function App() {
             <Stack.Screen name="Signup" component={SignUp} />
             <Stack.Screen name="MyChats" component={MyChats} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
-
             <Stack.Screen name="MyRequests" component={MyRequests} />
             <Stack.Screen name="ResponseHost" component={ResponseHost} />
             <Stack.Screen name="ResponseRider" component={ResponseRider} />
@@ -199,7 +372,6 @@ export default function App() {
         </StripeProvider>
       </Provider>
     </NavigationContainer>
-
   );
 }
 
