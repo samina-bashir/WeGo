@@ -162,7 +162,39 @@ const SetLocationScreen = ({ onLocationSet }) => {
           console.error('Error fetching address:', error);
         }
       }
-      onLocationSet(fromLocation, toLocation)
+      const myHeaders = new Headers();
+      myHeaders.append("Content-Type", "application/json");
+      myHeaders.append(
+        "X-Goog-Api-Key",
+        "AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8"
+      );
+      myHeaders.append(
+        "X-Goog-FieldMask",
+        "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
+      );
+
+      const raw =
+        `{origin:{location: {latLng: {latitude: ${fromLocation.latitude}, longitude: ${fromLocation.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toLocation.latitude},       longitude: ${toLocation.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: true,  languageCode: "en-US",  units: "IMPERIAL"}`;
+
+      const requestOptions = {
+        method: "POST",
+        headers: myHeaders,
+        body: raw,
+        redirect: "follow",
+      };
+
+      fetch(
+        "https://routes.googleapis.com/directions/v2:computeRoutes",
+        requestOptions
+      )
+        .then((response) => response.json())
+        .then((result) => {
+          // alert(result)
+          console.log(result);
+         // alert(result.routes[0].distanceMeters)
+         onLocationSet(fromLocation, toLocation, result.routes[0].distanceMeters, result.routes[0].duration)
+        })
+    
     }
     if (selectFromMapMode) {
       if (!fromDraggedLocation || !toDraggedLocation) {
@@ -192,7 +224,40 @@ const SetLocationScreen = ({ onLocationSet }) => {
       } catch (error) {
         console.error('Error fetching address:', error);
       }
-      onLocationSet(fromDraggedLocation, toDraggedLocation)
+      const myHeaders = new Headers();
+      myHeaders.append("Content-Type", "application/json");
+      myHeaders.append(
+        "X-Goog-Api-Key",
+        "AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8"
+      );
+      myHeaders.append(
+        "X-Goog-FieldMask",
+        "routes.duration,routes.distanceMeters"
+      );
+
+      const raw =
+        `{origin:{location: {latLng: {latitude: ${fromDraggedLocation.latitude}, longitude: ${fromDraggedLocation.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toDraggedLocation.latitude},       longitude: ${toDraggedLocation.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: false,  languageCode: "en-US",  units: "IMPERIAL"}`;
+
+      const requestOptions = {
+        method: "POST",
+        headers: myHeaders,
+        body: raw,
+        redirect: "follow",
+      };
+
+      fetch(
+        "https://routes.googleapis.com/directions/v2:computeRoutes",
+        requestOptions
+      )
+        .then((response) => response.json())
+        .then((result) => {
+          // alert(result)
+          console.log(result);
+          //alert(result.routes[0].distanceMeters)
+         // alert(result.routes[0].duration)
+         onLocationSet(fromDraggedLocation, toDraggedLocation, result.routes[0].distanceMeters,result.routes[0].duration)
+        })
+      
     }
   }
 
@@ -206,7 +271,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
               ref={fromRef}
               predefinedPlacesAlwaysVisible={true}
               enableHighAccuracyLocation={true}
-              textInputProps={{ clearButtonMode: true }}
+              textInputProps={{ clearButtonMode: 'while-editing' }}
               predefinedPlaces={[
                 {
                   description: 'Current Location',

@@ -1,6 +1,6 @@
 const initialState = {
     rideDetails: null,
-    isLoading: false,
+    isLoading: true,
     distance: 10,
     duration: 70,
     fromLocation: null,
@@ -16,11 +16,14 @@ const initialState = {
     cancelledRiders: [],
     cancelledByMe: false,
     rideEnded: false,
-    showDirections: false
+    showDirections: false,
+    hostLocation: null,
+    minutesPassed: 0
     // Add other ride-related state properties if needed
 };
 
 const rideReducer = (state = initialState, action) => {
+    console.log('red act', action.type)
     switch (action.type) {
         case 'SET_RIDE_DETAILS':
             return {
@@ -63,6 +66,7 @@ const rideReducer = (state = initialState, action) => {
                 toRideLocation: action.payload,
             };
         case 'SET_FARE':
+            console.log('ghosting fare: ', initialState.fare)
             return {
                 ...state,
                 fare: action.payload,
@@ -98,11 +102,13 @@ const rideReducer = (state = initialState, action) => {
                 cancelledRiders: action.payload,
             };
         case 'SET_LOCATION':
+            console.log('i am ghost too ', action.payload)
             return {
                 ...state,
                 location: action.payload,
             };
         case 'SET_RIDE_ENDED':
+            console.log('i am a ghost ', action.payload)
             return {
                 ...state,
                 rideEnded: action.payload,
@@ -111,6 +117,22 @@ const rideReducer = (state = initialState, action) => {
             return {
                 ...state,
                 showDirections: action.payload,
+            };
+        case 'SET_HOST_LOCATION':
+            return {
+                ...state,
+                hostLocation: action.payload,
+            };
+        case 'INCREMENT_FARE_BY_10':
+            return {
+                ...state,
+                fare: state.fare + 10
+            };
+        case 'INC_PASSED':
+            console.log('ghosting passed', action.payload)
+            return {
+                ...state,
+                minutesPassed: state.minutesPassed + 1,
             };
         default:
             return state;

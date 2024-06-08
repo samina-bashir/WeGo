@@ -10,6 +10,9 @@ import Picker from '../components/Picker';
 import { useSelector } from 'react-redux';
 
 const FindRiderScreen = () => {
+    const route = useRoute();
+    const myReqData = route?.params
+
     const [isLoading, setIsLoading] = useState(true)
     const [requests, setRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
@@ -25,13 +28,12 @@ const FindRiderScreen = () => {
     const [selectedItem, setItem] = useState(null);
     const [declinedRequests, setDeclinedRequests] = useState([]);
     const [showAcceptModal, setShowAcceptModal] = useState(false);
-    const currentUser = useSelector((state) => state.user.user);
+    const currentUser = { _id: 'FZxbp2UoJxThVSBIjIIbGEA3Z202' }//useSelector((state) => state.user.user);
     const [selectedRequestId, setSelectedRequestId] = useState(null);
-    const route= useRoute();
-    const myReqData = route.params;
-    
+
+
     const response = {
-        
+
         requestId: myReqData?.id,
         fare: myReqData?.fare,
         from: myReqData?.from,
@@ -41,56 +43,163 @@ const FindRiderScreen = () => {
         seats: myReqData?.seats
     };
 
+    const chechkWayPoints = (fromLat, toLat, fromLong, toLong, onSuccess) => {
+        try {
+            const myHeaders = new Headers();
+            myHeaders.append("Content-Type", "application/json");
+            myHeaders.append(
+                "X-Goog-Api-Key",
+                "AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8"
+            );
+            myHeaders.append(
+                "X-Goog-FieldMask",
+                "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
+            );
+
+            const raw = JSON.stringify({
+                origin: { location: { latLng: { latitude: myReqData?.from.latitude, longitude: myReqData?.from.longitude } } },
+                destination: { location: { latLng: { latitude: myReqData?.to.latitude, longitude: myReqData?.to.longitude } } },
+                travelMode: "DRIVE",
+                routingPreference: "TRAFFIC_AWARE",
+                computeAlternativeRoutes: false,
+                languageCode: "en-US",
+                units: "IMPERIAL",
+                intermediates: [
+                    { location: { latLng: { latitude: fromLat, longitude: fromLong } } },
+                    { location: { latLng: { latitude: toLat, longitude: toLong } } }
+                ]
+            });
+            const requestOptions = {
+                method: "POST",
+                headers: myHeaders,
+                body: raw,
+                redirect: "follow",
+            };
+
+            fetch(
+                "https://routes.googleapis.com/directions/v2:computeRoutes",
+                requestOptions
+            )
+                .then((response) => response.json())
+                .then((result) => {
+                    if (result.routes && result.routes.length > 0) {
+                        // alert(parseInt(myReqData?.routeTime) +" : "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]))
+                        console.log(result);
+                        console.log(myReqData?.routeTime);
+                        let threshHold = 0
+                        let extraTime = 0
+                        console.log(parseInt(result?.routes[0]?.duration?.split('s')[0]))
+                        extraTime = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime)
+                        threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
+                        // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
+                        // alert(" th "+Math.round(threshHold))
+                        console.log('thresh', threshHold);
+                        console.log('extra', extraTime)
+                        if (Math.round(threshHold) < 50) {
+
+                            console.log('finallyy')
+                            onSuccess(extraTime)
+                        } else {
+                            console.log('request not upto mark!')
+                            return
+                        }
+                    } else {
+                        console.log('result not ok', result)
+                    }
+
+                }).catch((error) => {
+                    console.error(error)
+                    alert("error new" + error)
+                });
+        } catch (error) {
+            alert("error new 2" + error)
+        }
+    }
+
+
     useEffect(() => {
         const fetchRequests = async () => {
             setIsLoading(true)
-            const requestsCollection = collection(firestoreDB, 'findHostRequests');
-            const q = query(requestsCollection);
+            // const requestsCollection = collection(firestoreDB, 'findHostRequests');
+            // const q = query(requestsCollection);
 
+            // const querySnapshot = await getDocs(q);
+
+            const requestsCollection = collection(firestoreDB, 'findHostRequests');
+            const userId = currentUser?._id
+            const q = query(requestsCollection, where('createdBy', '!=', userId));
             const querySnapshot = await getDocs(q);
+
             const requestsData = [];
 
             for (const document of querySnapshot.docs) {
+                setIsLoading(true)
                 const requestData = document.data();
-                const createdBy = requestData.createdBy;
+                if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude) {
+                    chechkWayPoints(requestData.from.latitude, requestData.to.latitude, requestData.from.longitude, requestData.to.longitude, async (extraTime) => {
+                        // alert('onSuccess = previous code')
+                        const createdBy = requestData.createdBy;
 
-                // Retrieve additional data from 'users' collection
-                const userRef = doc(firestoreDB, 'users', createdBy);
-                const userSnapshot = await getDoc(userRef);
-                requestData.userData = userSnapshot.exists() ? userSnapshot.data() : {};
-                const email = requestData.userData.email;
-                const domain = email.substring(email.lastIndexOf("@") + 1);
-                
-                // Create Firestore document reference
-                const orgRef = doc(firestoreDB, 'organizations', domain);
-                // Get the document
-                await getDoc(orgRef).then((docSnapshot) => {
-                    if (docSnapshot.exists()) {
-                        requestData.userData.orgName = docSnapshot.data().Name;
-                        if (requestData.userData.orgName == '') {
-                            requestData.userData.orgName = 'Unverified Institute'
-                        }
-                        console.log("Organization Name:", requestData.userData.orgName);
-                    } else {
-                        requestData.userData.orgName = 'Unverified Institute';
-                        console.log("No organization found for domain:", domain);
-                    }
-                }).catch((error) => {
-                    console.error("Error getting organization:", error);
-                });
-                console.log(requestData.userData.orgName)
+                        // Retrieve additional data from 'users' collection
+                        const userRef = doc(firestoreDB, 'users', createdBy);
+                        const userSnapshot = await getDoc(userRef);
+                        requestData.userData = userSnapshot.exists() ? userSnapshot.data() : {};
+                        const email = requestData.userData.email;
+                        const domain = email.substring(email.lastIndexOf("@") + 1);
 
-                requestsData.push({
-                    id: document.id,
-                    ...requestData,
-                });
+                        // Create Firestore document reference
+                        const orgRef = doc(firestoreDB, 'organizations', domain);
+                        // Get the document
+                        await getDoc(orgRef).then((docSnapshot) => {
+                            if (docSnapshot.exists()) {
+                                requestData.userData.orgName = docSnapshot.data().Name;
+                                if (requestData.userData.orgName == '') {
+                                    requestData.userData.orgName = 'Unverified Institute'
+                                }
+                                console.log("Organization Name:", requestData.userData.orgName);
+                            } else {
+                                requestData.userData.orgName = 'Unverified Institute';
+                                console.log("No organization found for domain:", domain);
+                            }
+                        }).catch((error) => {
+                            console.error("Error getting organization:", error);
+                        });
+                        console.log(requestData.userData.orgName)
+                        // alert("document.id" + document.id)
+                        requestsData.push({
+                            id: document.id,
+                            extraTime: extraTime,
+                            ...requestData,
+                        });
+                        let filtered = requestsData.sort((a, b) => {
+                            // Compare by AC
+                            if (a.ac == filters.ac) {
+                                return true;
+                            } else {
+                                // Compare by music
+                                if (a.music == filters.music) {
+                                    return true;
+                                } else {
+                                    // Compare by gender
+                                    if ((a.userData.gender === 1 && gender === 'female') || (a.userData.gender === 0 && gender === 'male')) {
+                                        return a.gender.localeCompare(b.gender);
+                                    } else {
+                                        // Compare by fare (low to minimum)
+                                        return a.fare - b.fare;
+                                    }
+                                }
+                            }
+                        });
+                        setRequests(filtered);
+                        setFilteredRequests(filtered);
+                         setIsLoading(false)
+                    })
+                }
             }
 
-            setRequests(requestsData);
-            setFilteredRequests(requestsData);
+            // setRequests(requestsData);
+            // setFilteredRequests(requestsData);
             console.log(requestsData)
-            applyFilters();
-            setIsLoading(false)
         };
 
         fetchRequests();
@@ -99,7 +208,7 @@ const FindRiderScreen = () => {
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests]);
-    
+
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {
@@ -114,6 +223,14 @@ const FindRiderScreen = () => {
                         setShowAcceptModal(false)
                         // Status changed to accepted, navigate to "during ride" screen
                         navigation.navigate('DuringRideHost', { requestId: myReqData.id });
+                    }
+                    if (myReqResponse && myReqResponse.status === 'rejected') {
+                        setShowAcceptModal(false)
+                        Alert.alert(
+                            'Request Rejected',
+                            'Rider has rejected your request. Find other riders...',
+                            [{ text: 'OK' }]
+                        );
                     }
                 }
             });
@@ -130,10 +247,11 @@ const FindRiderScreen = () => {
                 request.userData.rating >= ratingRange[0] && request.userData.rating <= ratingRange[1] &&
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
-                !declinedRequests.includes(request.id) &&
-                request.createdBy !=currentUser._id
+                !declinedRequests.includes(request?.id) &&
+                request.createdBy != currentUser._id 
             );
-        });
+        }
+        )
         setFilteredRequests(filtered);
     };
 
@@ -149,7 +267,7 @@ const FindRiderScreen = () => {
         console.log(response)
         console.log(myReqData)
         // Add or update response in Firestore
-        
+
         try {
             const responseRef = doc(firestoreDB, 'responsesHost', reqID);
             const docSnapshot = await getDoc(responseRef);
@@ -161,19 +279,22 @@ const FindRiderScreen = () => {
                 const responseIndex = docSnapshot.data().responsesHost.findIndex(response => response.responseBy === currentUser?._id);
                 console.log(responseIndex)
                 if (responseIndex == -1) {
-                // Document already exists, update it
-                await updateDoc(responseRef, {
-                    responsesHost: [...docSnapshot.data().responsesHost, response]
-                });
-            }else{
-                const existingData=docSnapshot.data()
-                existingData.responsesHost[responseIndex]=response
-                console.log('d',existingData)
-                await updateDoc(responseRef, 
-                   {responsesHost: existingData.responsesHost}
-                );
-            }
+                    // Document does not exist
+                    console.log('i am here cutie!')
+                    await updateDoc(responseRef, {
+                        responsesHost: [...docSnapshot.data().responsesHost, response]
+                    });
+                } else {
+                    console.log('i am there cutie!')
+                    const existingData = docSnapshot.data()
+                    existingData.responsesHost[responseIndex] = response
+                    console.log('d', existingData)
+                    await updateDoc(responseRef,
+                        { responsesHost: existingData.responsesHost }
+                    );
+                }
             } else {
+                console.log('i am out cutie!')
                 // Document doesn't exist, create it with the accepted request ID
                 await setDoc(responseRef, {
                     responsesHost: [response]
@@ -191,7 +312,7 @@ const FindRiderScreen = () => {
             const responseRef = doc(firestoreDB, 'responsesHost', selectedRequestId);
             const responseData = await getDoc(responseRef);
             if (responseData.exists()) {
-                
+
                 const responseIndex = responseData.data().responsesHost.findIndex(response => response.responseBy === currentUser._id);
                 if (responseIndex !== -1) {
                     const updatedData = { ...responseData.data() };
@@ -224,8 +345,8 @@ const FindRiderScreen = () => {
                 </View>
 
                 <View style={{ paddingRight: 10 }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>  
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>        
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
                     <View style={styles.callChatIcons}>
                         <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
                             <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
@@ -258,7 +379,9 @@ const FindRiderScreen = () => {
                     <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
-                    setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
+                    console.log(item.id)
+                    console.log(declinedRequests.length)
+                    setDeclinedRequests([...declinedRequests, item.id]); // Add declined request ID
                 }}>
                     <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
                 </TouchableOpacity>
@@ -278,14 +401,18 @@ const FindRiderScreen = () => {
                 </TouchableOpacity>
 
             </View>
-            {isLoading && (
+            {/* {isLoading && (
           <ActivityIndicator size={"large"} color={GlobalColors.primary} />
-        )}
-        {console.log(isLoading)}
+        )} */}
+
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
                 key={item => item.id}
+                ListFooterComponent={() => { return isLoading ? <ActivityIndicator size={"large"} color={GlobalColors.primary} /> : filteredRequests.length < 1 ? null : <Text style={{ color: 'black', textAlign: 'center' }}>No More Results!</Text> }}
+                ListEmptyComponent={() => {
+                    return isLoading ? null : <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}><Text style={{ color: 'black' }}>No Request found!</Text></View>
+                }}
             />
             <Modal
                 visible={showAcceptModal}
@@ -295,8 +422,8 @@ const FindRiderScreen = () => {
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalText}>Waiting for confirmation...</Text>
-                        <TouchableOpacity style={[styles.button, {flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
-                            <Text  style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
+                        <TouchableOpacity style={[styles.button, { flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
+                            <Text style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -336,7 +463,7 @@ const FindRiderScreen = () => {
                                 style={{ marginLeft: 'auto' }}
                             />
                         </View>
-                        
+
                         <View style={styles.filterItem}>
                             <Text style={styles.filterText}>Rating</Text>
                             <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>

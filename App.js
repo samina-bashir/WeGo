@@ -137,7 +137,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
   }
 
   // Assuming each location has a latitude property
-  const validLocations = locations.filter(location => location && location.coords?.latitude);
+  const validLocations = locations.filter(location => location && location?.coords?.latitude);
 
   if (validLocations.length === 0) {
     console.error('No valid locations found:', locations);
@@ -163,7 +163,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
   if (waypoints) {
     console.log('fine', waypoints)
     waypoints.forEach(waypoint => {
-      const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, waypoint?.latitude, waypoint.longitude);
+      const distance = calculateDistance(currentLocation?.coords?.latitude, currentLocation?.coords.longitude, waypoint?.latitude, waypoint.longitude);
       console.log(distance)
       if (distance < proximityThreshold) {
         console.log(`Waypoint ${waypoint.name} is near the current location.`);
@@ -211,7 +211,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
     });
   } else { console.log('no way') }
   if (toLocation) {
-    const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, toLocation.latitude, toLocation.longitude);
+    const distance = calculateDistance(currentLocation?.coords?.latitude, currentLocation?.coords.longitude, toLocation?.latitude, toLocation?.longitude);
     console.log(distance)
     if (distance < proximityThreshold) {
       console.log(`Ride end Location ${toLocation.name} is near the current location.`);
@@ -235,7 +235,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
         console.log('loop range to', confirmedWaypoints.length)
         for (let i = 0; i < confirmedWaypoints.length; i++) {
           console.log('loop', i, confirmedWaypoints[i][0])
-          console.log(objectsAreEqual(confirmedWaypoints[i][0], toLocation))
+    
           if (objectsAreEqual(confirmedWaypoints[i][0], toLocation)) {
             isAlreadyConfirmed = true;
             break;
@@ -243,6 +243,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
         }
         if (!isAlreadyConfirmed) {
           confirmedWaypoints.push([toLocation, false, Timestamp.now(), false]);
+          console.log('cwp',confirmedWaypoints)
           Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
           if(showDirections){
           scheduleEndNotification(toLocation);
@@ -254,10 +255,12 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
 
 });
 TaskManager.defineTask(RIDER_TASK, async ({ data, error }) => {
+  console.log('i am not culprit')
   if (error) {
     console.error('Error in background location task:', error.message);
     return;
   }
+
   if (!data || !data.locations) {
     console.error('Invalid data structure:', data);
     return;
@@ -271,7 +274,7 @@ TaskManager.defineTask(RIDER_TASK, async ({ data, error }) => {
   }
 
   // Assuming each location has a latitude property
-  const validLocations = locations.filter(location => location && location.coords?.latitude);
+  const validLocations = locations.filter(location => location && location?.coords?.latitude);
 
   if (validLocations.length === 0) {
     console.error('No valid locations found:', locations);
@@ -279,50 +282,25 @@ TaskManager.defineTask(RIDER_TASK, async ({ data, error }) => {
   }
 
   console.log('Received new valid locations:', validLocations);
+
   const lastIndex = validLocations.length - 1;
   const currentLocation = validLocations[lastIndex];
+
+  // Check if currentLocation and necessary properties are defined
+  if (!currentLocation) {
+    console.error('Current location is undefined');
+    return;
+  }
+
   // Dispatch your setLocation action using the imported function
-  Store.dispatch(setLocation(currentLocation));
-  await updateDoc(doc(firestoreDB, 'ride', Store.getState().ride.rideDetails.id), {
-    location: currentLocation
-  });
-  const waypoints = Store.getState().ride.wayPoints;
-
-  // Loop through waypoints and check if any are near the current location
-  const proximityThreshold = 333334.01;
-  if (waypoints) {
-    console.log('fine', waypoints)
-    waypoints.forEach(waypoint => {
-      const distance = calculateDistance(currentLocation.coords?.latitude, currentLocation.coords.longitude, waypoint?.latitude, waypoint.longitude);
-      console.log(distance)
-      if (distance < proximityThreshold) {
-        registerForPushNotificationsAsync();
-
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-          console.log(notification)
-        });
-
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-          console.log(response);
-        });
-
-        currentUser = Store.getState().user.user._id
-        if (Store.getState().ride.rideDetails) {
-          const rideDetails = [...Store.getState().ride.rideDetails];
-          const currentUserIndex = rideDetails.Riders.findIndex(rider => rider.rider === currentUser._id);
-          const updatedRiders = [...rideDetails.Riders];
-          updatedRiders[currentUserIndex].location = currentLocation;
-          const rideRef = doc(collection(firestoreDB, 'ride'), Store.getState().ride.rideDetails.id);
-          updateDoc(rideRef, { Riders: updatedRiders });
-        }
-
-      } else {
-        console.log('bassss')
-      }
-    });
-  } else { console.log('no way') }
-
+  try {
+    Store.dispatch(setLocation(currentLocation));
+  } catch (dispatchError) {
+    console.error('Error dispatching location:', dispatchError);
+    return;}
+  
 });
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the Earth in kilometers
   const dLat = deg2rad(lat2 - lat1);
@@ -345,11 +323,14 @@ export default function App() {
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
-            <Stack.Screen name="DuringRide" component={DuringRideScreen} />
-            <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
+          <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
+          <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
+          <Stack.Screen name="DuringRide" component={DuringRideScreen} />
+          <Stack.Screen name="Splash" component={SplashScreen} />
+           
+           
             <Stack.Screen name="SetLocation" component={SetLocationScreen} />
-            <Stack.Screen name="Splash" component={SplashScreen} />
+            
             <Stack.Screen name="FindScheduledRider" component={FindScheduledRider} />
             <Stack.Screen name="FindScheduledHost" component={FindScheduledHost} />
             <Stack.Screen name="PayFare" component={PayFare} />

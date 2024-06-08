@@ -39,7 +39,7 @@ const CoriderModal = ({ visible, coriders, onClose }) => {
                     }
                     )
                 )
-           
+        
 
             coriders?setRiderDetails(details): setRiderDetails([]);
             console.log(riderDetails)
@@ -83,6 +83,7 @@ const CoriderModal = ({ visible, coriders, onClose }) => {
                         <Icon type='font-awesome-5' name='times' color={GlobalColors.primary} />
                     </TouchableOpacity>
                     <Text style={styles.heading}>Coriders</Text>
+                    {riderDetails.length == 0 && <Text>No Coriders yet!</Text>}
                     <FlatList
                         data={riderDetails}
                         renderItem={renderCoriderItem}

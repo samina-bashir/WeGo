@@ -1,5 +1,5 @@
 import React, { Component, useEffect, useRef, useState } from 'react';
-import { View, Text, Button, TouchableOpacity, Animated, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, Button, TouchableOpacity, Animated, Linking, ActivityIndicator, Image } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
@@ -13,13 +13,20 @@ import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { collection } from 'firebase/firestore';
 import { useDispatch, useSelector } from 'react-redux';
 import * as Location from 'expo-location';
-import { setLoading, setLocation, setRideDetails, setDistance, setDuration, setFromLocation, setToLocation, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints } from '../context/actions/rideActions';
+import Constants from 'expo-constants';
+import { setLoading, setLocation, setRideDetails, setDistance, setDuration, setFromLocation, setToLocation, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints, setHostLocation, setRideEnded, incrementFareBy10, incMinutesPassed } from '../context/actions/rideActions';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
+import * as Notifications from 'expo-notifications';
+import { Alert } from 'react-native';
+import Store from '../context/store';
 
 const DuringRideScreen = () => {
   const [payNow, setPayNow] = useState(false)
   const [isMapReady, setIsMapReady] = useState(false);
+  const minutesPassed = useSelector(state => state.ride.minutesPassed)
+  const [targetTime, setTargetTime] = useState(null);
+  const [timerTime, setTimerTime] = useState(30);
   const [rideDetailsHeight, setRideDetailsHeight] = useState(280);
   const initialRegion = {
     latitude: 31.480864,
@@ -27,7 +34,9 @@ const DuringRideScreen = () => {
     latitudeDelta: 0.0102,
     longitudeDelta: 0.0101,
   };
-  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //useSelector((state) => state.user.user);
+  const notificationListener = useRef();
+  const responseListener = useRef();
+  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2', name: 'Samina' } //useSelector((state) => state.user.user);
   const isLoading = useSelector(state => state.ride.isLoading);
   const rideDetails = useSelector(state => state.ride.rideDetails);
   const distance = useSelector(state => state.ride.distance);
@@ -41,33 +50,140 @@ const DuringRideScreen = () => {
   const coriders = useSelector(state => state.ride.coriders);
   const wayPoints = useSelector(state => state.ride.wayPoints);
   const cancelledByMe = useSelector(state => state.ride.cancelledByMe);
+  const hostLocation = useSelector(state => state.ride.hostLocation);
+  const rideEnded = useSelector(state => state.ride.rideEnded);
   const navigation = useNavigation();
   const [driverData, setDriverData] = useState(null);
   const [rerouteLocation, setRerouteLocation] = useState(null);
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
+  const rideID = useRoute.params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
-  const YOUR_TASK_NAME = 'background-location-task';
+  const YOUR_TASK_NAME = 'rider-background-location-task';
   const dispatch = useDispatch();
   const [timeLeft, setTimeLeft] = useState(5 * 60);
   const [showTimerPopup, setShowTimerPopup] = useState(false);
-  const setTimer =()=> {
-    setShowTimerPopup(true)
-    const interval = setInterval(() => {
-      setTimeLeft((prevTimeLeft) => {
-        if (prevTimeLeft === 0) {
-          clearInterval(interval);
-          return prevTimeLeft;
-        }
-        return prevTimeLeft - 1;
-      });
-    }, 1000);
-    setShowTimerPopup(false)
-    return () => clearInterval(interval);
+
+  useEffect(()=>{
+   
+  },[timerTime])
+
+  async function scheduleEndNotification(toLocation) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        sound: 'default',
+        title: `Ride Ended`,
+        body: `You have almost reached end of your ride. Click to pay for the ride.`,
+        data: { data: 'goes here' },
+      },
+      trigger: { seconds: 1 },
+    });
   }
 
+  async function scheduleFareIncreaseNotification() {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        sound: 'default',
+        title: `Time's Up`,
+        body: `Waiting time has exceeded. Your fare will increase per minute.`,
+        data: { data: 'goes here' },
+      },
+      trigger: { seconds: 1 },
+    });
+    showFareIncreaseAlert();
+  }
+  
+  const showFareIncreaseAlert =()=> {
+    console.log('ALERT')
+    Alert.alert(
+      "Time's Up",
+      `Waiting time has exceeded. Your fare will increase per minute.`,
+      undefined,
+      { cancelable: false }
+    );
+  }
+ 
+
+  useEffect(() => {
+    if(!isLoading)
+      setTimer();
+  }, [isLoading]);
+  const setTimer = () => {
+    setShowTimerPopup(true);
+
+    // Get the current time
+    const currentTime = new Date();
+
+    // Set the target time 5 minutes from the current time
+    const targetTime = new Date(currentTime.getTime() + 5 * 60000); // Adding 5 minutes in milliseconds
+    setTargetTime(targetTime)
+  }
+
+  const updateCurrentUserFare = async () => {
+    try {
+      const docRef = doc(collection(firestoreDB, 'ride'), rideID);
+      const doc = await getDoc(docRef);
+  
+      if (doc.exists) {
+        const data = doc.data();
+        const riders = data.Riders || [];
+  
+        // Update the fare for the current user
+        const updatedRiders = riders.map(rider => {
+          if (rider.rider === currentUser._id && rider.fare !== undefined) {
+            return {
+              ...rider,
+              fare: rider.fare + 10
+            };
+          }
+          return rider;
+        });
+  
+        // Update the document with the modified riders array
+        await updateDoc(docRef,{ Riders: updatedRiders });
+  
+        console.log('Fare updated successfully for the current user.');
+      } else {
+        console.log('Document does not exist.');
+      }
+    } catch (error) {
+      console.error('Error updating fare: ', error);
+    }
+  };
+
+  useEffect(() => {
+    if (targetTime) {
+    const interval = setTimeout(() => {
+      // Get the current time
+      const currentTime = new Date();
+
+      // Calculate the time difference in milliseconds
+      const timeDifference = targetTime - currentTime;
+      console.log(timeDifference)
+      console.log('fares',fare)
+      if (timeDifference<0){
+        
+        console.log((-timeDifference) / 60000 )
+        console.log('min', minutesPassed)
+        console.log('faresss',fare)
+        if((-timeDifference) / 60000 > minutesPassed){
+          updateCurrentUserFare();
+          dispatch(incrementFareBy10());
+          dispatch(incMinutesPassed());
+        }
+      }
+      // Convert time difference from milliseconds to seconds
+      setTimeLeft(Math.floor(timeDifference / 1000));
+      if (Math.abs(timeDifference/1000) < 1){
+        scheduleFareIncreaseNotification()
+      }
+    }, 1000); // Update the timer every second
+
+    // Return cleanup function
+  }
+  },[targetTime, timeLeft]);
   const requestLocationPermissions = async () => {
+    console.log('trying permission...')
     try {
       // Request foreground permissions first
       const foregroundPermissionResult = await Location.requestForegroundPermissionsAsync();
@@ -75,7 +191,7 @@ const DuringRideScreen = () => {
         console.log('Foreground permission to access location was denied');
         return;
       }
-
+      console.log('got foreground ones...')
       // If foreground permissions are granted, then request background permissions
       const backgroundPermissionResult = await Location.requestBackgroundPermissionsAsync();
       if (backgroundPermissionResult.status !== 'granted') {
@@ -90,27 +206,67 @@ const DuringRideScreen = () => {
     }
   };
   async function startLocationUpdates() {
-    await requestLocationPermissions()
+    console.log('permission ahead...');
+    await requestLocationPermissions();
     const options = {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 1000, // Update every 1 second
-      distanceInterval: 10, // Update every 10 meters
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 1, // Update every 1 msecond
+      distanceInterval: 1, // Update every 0.1 meters
+      showsBackgroundLocationIndicator: true,
+      deferredUpdatesInterval: 0,
+      deferredUpdatesDistance: 0,
+      foregroundService: {
+        notificationTitle: "title",
+        notificationBody: "body",
+      },
+
     };
     async function registerBackgroundFetchAsync() {
       return BackgroundFetch.registerTaskAsync(YOUR_TASK_NAME, {
-        minimumInterval: 1 * 30, // task will fire 30 sec after app is backgrounded
+        minimumInterval: 1, // task will fire 30 sec after app is backgrounded
       });
     }
 
     try {
+      await stopLocationUpdates()
+      const isTaskRegistered1 = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+      console.log('off', isTaskRegistered1)
       await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
       //  await registerBackgroundFetchAsync()
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+      if (!isTaskRegistered) {
+        await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
+        const isTaskRegistered22 = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+        while (!isTaskRegistered22) {
+          console.log('noooo')
+          await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
+        }
+      } else {
+        console.log('Task is already registered and running');
+      }
       console.log('Started receiving location updates.');
     } catch (error) {
       console.error('Error starting location updates:', error.message);
     }
   }
+  const stopLocationUpdates = async () => {
 
+    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+    if (isTaskRegistered) {
+      await Location.stopLocationUpdatesAsync(YOUR_TASK_NAME);
+      console.log('Location updates stopped.');
+    } else {
+      console.log('Task is not registered.');
+    }
+
+    const isTaskRegisteredHost = await TaskManager.isTaskRegisteredAsync('host-background-location-task');
+    if (isTaskRegisteredHost) {
+      await Location.stopLocationUpdatesAsync('host-background-location-task');
+      console.log('Location updates stopped.');
+    } else {
+      console.log('Task is not registered.');
+    }
+  };
   const handleDirectionReady = (result) => {
     console.log(`Distance: ${result.distance} km`);
     console.log(`Duration: ${result.duration} min.`);
@@ -119,46 +275,34 @@ const DuringRideScreen = () => {
   };
 
   const adjustMapViewport = (coordinate1, coordinate2) => {
-    console.log('map adj')
+    console.log('f r', fare)
     let minLat, maxLat, minLng, maxLng = 0;
-    console.log('o', location)
     if (coordinate1 && coordinate2 && location && wayPoints) {
       minLat = Math.min(
         coordinate1.latitude,
         coordinate2.latitude,
-        location.coords.latitude,
+        location?.coords.latitude,
         ...(wayPoints.map(wayPoint => wayPoint.latitude))
       );
       maxLat = Math.max(
         coordinate1.latitude,
         coordinate2.latitude,
-        location.coords.latitude,
+        location?.coords.latitude,
         ...(wayPoints.map(wayPoint => wayPoint.latitude))
       );
       minLng = Math.min(
-        coordinate1.longitude,
-        coordinate2.longitude,
-        location.coords.longitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude))
+        coordinate1?.longitude,
+        coordinate2?.longitude,
+        location?.coords?.longitude,
+        ...(wayPoints.map(wayPoint => wayPoint?.longitude))
       );
       maxLng = Math.max(
-        coordinate1.longitude,
-        coordinate2.longitude,
-        location.coords.longitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude))
+        coordinate1?.longitude,
+        coordinate2?.longitude,
+        location?.coords?.longitude,
+        ...(wayPoints.map(wayPoint => wayPoint?.longitude))
       );
-      console.log(maxLat)
-      console.log(
-        coordinate1.latitude,
-        coordinate2.latitude,
-        location.coords.latitude,
-        ...(wayPoints.map(wayPoint => wayPoint.latitude)))
-      console.log(
-        coordinate1.latitude,
-        coordinate2.latitude,
-        location.coords.longitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude)))
-      console.log('ok')
+
     } else if (coordinate1 && coordinate2 && wayPoints) {
       minLat = Math.min(
         coordinate1.latitude,
@@ -171,14 +315,14 @@ const DuringRideScreen = () => {
         ...(wayPoints.map(wayPoint => wayPoint.latitude))
       );
       minLng = Math.min(
-        coordinate1.longitude,
-        coordinate2.longitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude))
+        coordinate1?.longitude,
+        coordinate2?.longitude,
+        ...(wayPoints.map(wayPoint => wayPoint?.longitude))
       );
       maxLng = Math.max(
-        coordinate1.longitude,
-        coordinate2.longitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude))
+        coordinate1?.longitude,
+        coordinate2?.longitude,
+        ...(wayPoints.map(wayPoint => wayPoint?.longitude))
       );
       console.log(maxLat)
       console.log(
@@ -188,19 +332,19 @@ const DuringRideScreen = () => {
       console.log(
         coordinate1.latitude,
         coordinate2.latitude,
-        ...(wayPoints.map(wayPoint => wayPoint.longitude)))
-      console.log('ok')
+        ...(wayPoints.map(wayPoint => wayPoint?.longitude)))
+
     } else if (coordinate1 && coordinate2 && location) {
       minLat = Math.min(coordinate1.latitude, coordinate2.latitude, location.latitude);
       maxLat = Math.max(coordinate1.latitude, coordinate2.latitude, location.latitude);
-      minLng = Math.min(coordinate1.longitude, coordinate2.longitude, location.longitude);
-      maxLng = Math.max(coordinate1.longitude, coordinate2.longitude, location.longitude);
+      minLng = Math.min(coordinate1?.longitude, coordinate2?.longitude, location?.longitude);
+      maxLng = Math.max(coordinate1?.longitude, coordinate2?.longitude, location?.longitude);
     } else if (coordinate1 && coordinate2) {
       minLat = Math.min(coordinate1.latitude, coordinate2.latitude);
       maxLat = Math.max(coordinate1.latitude, coordinate2.latitude);
-      minLng = Math.min(coordinate1.longitude, coordinate2.longitude);
-      maxLng = Math.max(coordinate1.longitude, coordinate2.longitude);
-      console.log('ok')
+      minLng = Math.min(coordinate1?.longitude, coordinate2?.longitude);
+      maxLng = Math.max(coordinate1?.longitude, coordinate2?.longitude);
+
     } else {
       return;
     }
@@ -229,7 +373,83 @@ const DuringRideScreen = () => {
     // Call the function to start receiving location updates
     startLocationUpdates();
   }, []);
+  async function registerForPushNotificationsAsync() {
+    let token;
 
+
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      alert('Failed to get push token for push notification!');
+      return;
+    }
+    token = await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig.extra.eas?.projectId,
+    })
+
+
+    return token;
+  }
+
+  useEffect(() => {
+    console.log('ahh')
+    const thresh = 5000000;
+    var i = 0;
+    while(i<thresh){
+      i=i+1
+    }
+    if (!rideEnded) {
+      console.log(calculateDistance(location?.coords.latitude, location?.coords?.longitude, toLocation?.latitude, toLocation?.longitude))
+      if (calculateDistance(location?.coords.latitude, location?.coords?.longitude, toLocation?.latitude, toLocation?.longitude) < thresh) {
+        dispatch(setRideEnded(true))
+
+        registerForPushNotificationsAsync();
+
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+          console.log(notification)
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+          console.log(response);
+        });
+
+        scheduleEndNotification(toLocation);
+        setPayNow(true);
+        while (!rideEnded) {
+          var a = 0;
+          console.log(rideEnded)
+          break;
+        }
+      }
+    }
+  }, [location]);
+
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the Earth in kilometers
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // Distance in kilometers
+    return distance;
+  }
+
+  function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+  }
 
   useEffect(() => {
 
@@ -247,8 +467,10 @@ const DuringRideScreen = () => {
             return;
           }
           console.log('Ride data:', rideData);
-          setFromRideLocation(rideData.from)
-          setToRideLocation(rideData.to)
+          rideData.id = rideSnapshot.id;
+          dispatch(setHostLocation(rideData.location))
+          dispatch(setFromRideLocation(rideData.from))
+          dispatch(setToRideLocation(rideData.to))
           const currentUserRider = rideData.Riders.find(rider => rider.rider === currentUser._id);
           if (!currentUserRider) {
             console.log('Current user rider data not found in ride.');
@@ -284,7 +506,7 @@ const DuringRideScreen = () => {
           for (const rider of rideData.Riders) {
             if (rider.status == 'Cancelled') {
               console.log('rider is out')
-              if(rider.rider==currentUser._id && !cancelledByMe){
+              if (rider.rider == currentUser._id && !cancelledByMe) {
                 Alert.alert(
                   'Ride Cancelled',
                   `Unfortunately, your Host ${userData.name} has cancelled the ride.`,
@@ -324,6 +546,7 @@ const DuringRideScreen = () => {
               dispatch(setFare(rider.fare));
               dispatch(setFromLocation(rider.from));
               dispatch(setToLocation(rider.to));
+              console.log('to', rider.to)
               rider.from.riderName = currentUser.name
               rider.to.riderName = currentUser.name
               rider.from.type = 'Pickup'
@@ -343,9 +566,9 @@ const DuringRideScreen = () => {
         } catch (error) {
           console.error('Error processing ride data:', error);
         }
-        console.log('byie')
+
       });
-      console.log('byoe')
+
     } catch (error) {
       console.error('Error setting up snapshot listener:', error);
     }
@@ -354,7 +577,7 @@ const DuringRideScreen = () => {
 
   const cancelRide = async () => {
     try {
-      
+
       const currentUserIndex = rideDetails.Riders.findIndex(rider => rider.rider === currentUser._id);
       const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
       if (currentUserIndex !== -1) {
@@ -386,7 +609,7 @@ const DuringRideScreen = () => {
           penalty = time > scheduledTime - 720;
         }
       } else {
-          penalty = (Timestamp.now() - rideDetails.created) > (5 * 60 * 1000)
+        penalty = (Timestamp.now() - rideDetails.created) > (5 * 60 * 1000)
       }
       if (penalty) {
         const userRef = doc(collection(firestoreDB, 'users'), currentUser._id);
@@ -399,7 +622,8 @@ const DuringRideScreen = () => {
   };
 
   const handleMapReady = () => {
-    setIsMapReady(true);
+    setIsMapReady(false);
+
   };
 
   const handleGestureEvent = (event) => {
@@ -437,9 +661,14 @@ const DuringRideScreen = () => {
 
         </View>
         {showTimerPopup &&
-        <View style={{ padding: 20, borderRadius: 10 }}>
-          <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft:'auto'}}>Waiting Time: {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? `0${timeLeft % 60}` : timeLeft % 60}</Text>
-        </View>}
+          <View style={{ backgroundColor: 'red', padding: 10, borderRadius: 10 }}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: GlobalColors.background, marginLeft: 'auto' }}>
+              Waiting Time:
+              {timeLeft >= 0 ?
+                ` 0${Math.floor(timeLeft / 60)}:${timeLeft % 60 < 10 ? `0${timeLeft % 60}` : timeLeft % 60}` :
+                ` -0${Math.abs(Math.floor(-1 * timeLeft / 60))}:${Math.abs(timeLeft % 60) < 10 ? `0${Math.abs(timeLeft % 60)}` : Math.abs(timeLeft % 60)}`}
+            </Text>
+          </View>}
         <MapView
           ref={mapRef}
           style={styles.map}
@@ -450,17 +679,40 @@ const DuringRideScreen = () => {
           {location && (
             <Marker
               coordinate={{
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
+                latitude: location?.coords.latitude,
+                longitude: location?.coords?.longitude,
               }}
               title="Current Location"
             />
           )}
+          {hostLocation ? (
+            <Marker
+              coordinate={{
+                latitude: hostLocation?.coords.latitude,
+                longitude: hostLocation?.coords?.longitude,
+              }}
+              title={`${driverData?.name} is here!`}
+              image={require('../assets/map_marker.png')}
+            />
+          ) : fromRideLocation &&
+          (
+            <Marker
+
+              coordinate={{
+                latitude: fromRideLocation?.latitude,
+                longitude: fromRideLocation?.longitude,
+              }}
+              title={`${driverData?.name} is here!`}
+              image={require('../assets/map_marker.png')}
+
+            />
+          )
+          }
           {toLocation && (
             <Marker
               coordinate={{
                 latitude: toLocation.latitude,
-                longitude: toLocation.longitude,
+                longitude: toLocation?.longitude,
               }}
               title={'My Dropoff'}
               pinColor={GlobalColors.primary}
@@ -470,7 +722,7 @@ const DuringRideScreen = () => {
             <Marker
               coordinate={{
                 latitude: fromLocation.latitude,
-                longitude: fromLocation.longitude,
+                longitude: fromLocation?.longitude,
               }}
               title={'My Pickup'}
             />
@@ -479,7 +731,7 @@ const DuringRideScreen = () => {
             <Marker
               coordinate={{
                 latitude: toRideLocation.latitude,
-                longitude: toRideLocation.longitude,
+                longitude: toRideLocation?.longitude,
               }}
               title={toRideLocation.name}
               pinColor={GlobalColors.primary}
@@ -489,22 +741,26 @@ const DuringRideScreen = () => {
             <Marker
               coordinate={{
                 latitude: fromRideLocation.latitude,
-                longitude: fromRideLocation.longitude,
+                longitude: fromRideLocation?.longitude,
               }}
               title={fromRideLocation.name}
             />
           )}
-          {wayPoints && wayPoints.map(waypoint => {
-            return (
-              <Marker
-                coordinate={{
-                  latitude: waypoint.latitude,
-                  longitude: waypoint.longitude
-                }}
-                title={`${waypoint.riderName} (${waypoint.type})`}
-                pinColor={'tan'}
-              />
-            );
+          {wayPoints && wayPoints.map((waypoint, index) => {
+            if (waypoint.riderName !== currentUser.name) {
+              return (
+                <Marker
+                  key={index}
+                  coordinate={{
+                    latitude: waypoint.latitude,
+                    longitude: waypoint.longitude
+                  }}
+                  title={`${waypoint.riderName} (${waypoint.type})`}
+                  pinColor={'tan'}
+                />
+              );
+            }
+            return null;
           })}
 
           {isMapReady && !isLoading && ( // Render the directions only when the map is ready
@@ -523,10 +779,10 @@ const DuringRideScreen = () => {
             />
           )}
         </MapView>
-        <TouchableOpacity onPress={() => adjustMapViewport(fromRideLocation, toRideLocation)} style={{ position: 'absolute', left: 45, paddingTop: 75, paddingHorizontal: 5 }}>
+        <TouchableOpacity onPress={() => adjustMapViewport(fromRideLocation, toRideLocation)} style={{ position: 'absolute', left: 8, paddingTop: showTimerPopup ? 120 : 70, paddingHorizontal: 5 }}>
           <Icon name='street-view' type='font-awesome-5' size={30} color={GlobalColors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setRerouteLocation(location.coords)} style={{ position: 'absolute', left: 80, paddingTop: 75, paddingHorizontal: 5 }}>
+        <TouchableOpacity onPress={() => setRerouteLocation(location?.coords)} style={{ position: 'absolute', left: 45, paddingTop: showTimerPopup ? 120 : 70, paddingHorizontal: 5 }}>
           <Icon name='route' type='font-awesome-5' size={32} color={GlobalColors.primary} />
         </TouchableOpacity>
         {payNow && <PayNowOverlay
@@ -534,7 +790,7 @@ const DuringRideScreen = () => {
           host={driverData}
           riders={coriders}
           rideID={rideID} />}
-        {console.log('y', isLoading)}
+
         {isLoading ? (
           <ActivityIndicator style={{ padding: 25 }} size={"large"} color={GlobalColors.background} />
         ) :

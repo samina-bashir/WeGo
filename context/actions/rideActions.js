@@ -77,14 +77,27 @@ export const setRideDetails = (details) => ({
     type: 'SET_LOCATION',
     payload: location,
   });
-
   export const setRideEnded = (ended) => ({
-    type: 'SET_RIDE_ENDED',
-    payload: ended,
-  });
+        type: 'SET_RIDE_ENDED',
+        payload: ended,
+});
 
   export const setShowDirections = (directions) => ({
     type: 'SET_SHOW_DIRECTIONS',
     payload: directions,
   });
+
+  export const setHostLocation = (location) => ({
+    type: 'SET_HOST_LOCATION',
+    payload: location,
+  });
+
+  export const incrementFareBy10 = () => ({
+    type: 'INCREMENT_FARE_BY_10',
+    payload: 10,
+  });
    
+  export const incMinutesPassed = () => ({
+    type: 'INC_PASSED',
+    payload: 1,
+  });

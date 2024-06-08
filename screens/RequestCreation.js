@@ -21,6 +21,8 @@ import Menu from '../components/Menu';
 import MyRequests from './MyRequests';
 import { useSelector } from 'react-redux';
 import SetLocationScreen from './SetLocation';
+import axios from 'axios';
+import { BASE_URL } from '../config/backend';
 
 const windowWidth = Dimensions.get('window').width;
 const windowHeight = Dimensions.get('window').height;
@@ -35,6 +37,7 @@ const RequestCreationScreen = () => {
     const [gender, setGender] = useState(false);
     const [ac, setAC] = useState(false);
     const [fare, setFare] = useState(false);
+    const [estimatedFare, setEstimatedFare] = useState(null);
     const [location, setLocation] = useState(null);
     const [to, setTo] = useState(null);
     const [from, setFrom] = useState(null);
@@ -53,6 +56,9 @@ const RequestCreationScreen = () => {
     const [endDate, setEndDate] = useState(null);
     const [roundTrip, setRoundTrip] = useState(true);
     const [isMenuVisible, setMenuVisible] = useState(false);
+    const [routeDistance, setRouteDistance] = useState(null);
+    const [routeTime, setRouteTime] = useState(null);
+    const [petrolPrice, setPetrolPrice] = useState(null);
     const [rawSchedule, setRawSchedule] = useState(
         Array(7).fill({
             Earliest: '08:00', // Default earliest pickup time at 8:00 AM
@@ -62,9 +68,10 @@ const RequestCreationScreen = () => {
             enabled: true
         })
     );
+    const mapRef = useRef(null);
     const [schedule, setSchedule] = useState(null);
-    const currentUser = {_id:'dd'}//useSelector((state) => state.user.user);
-
+    const currentUser = {_id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //useSelector((state) => state?.user?.user);
+   
     useEffect(() => {
         (async () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
@@ -78,13 +85,101 @@ const RequestCreationScreen = () => {
         })();
     }, []);
     const VehicleIcon = ({ id, name, onPress }) => (
-        <TouchableOpacity onPress={() => setSelectedVehicle(id)} disabled={hasVehicle}>
+        <TouchableOpacity onPress={() => {setSelectedVehicle(id)}} disabled={hasVehicle}>
             <View style={[styles.vehicleIconContainer, selectedVehicle == id && styles.vehicleInfo]}>
                 <Icon name={name} type="font-awesome-5" size={40} color={GlobalColors.primary} style={{ paddingTop: 10 }} />
                 <InfoIcon onPress={onPress} />
             </View>
         </TouchableOpacity>
     );
+    useEffect(() => {
+        if (location) {
+            mapRef.current.animateToRegion({
+                latitude: location.latitude,
+                longitude: location.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.03,
+            });
+        }
+    }, [location]);
+    useEffect(() => {
+        const fetchPetrolPrice = async () => {
+          try {
+            const petrolPriceResponse = await fetch(BASE_URL + 'fare/get-petrol-price');
+            if (!petrolPriceResponse.ok) {
+              console.log(`Failed to fetch petrol price: ${petrolPriceResponse.statusText}`);
+               setPetrolPrice(270);
+            }else{
+            const petrolPriceData = await petrolPriceResponse.json();
+            setPetrolPrice(petrolPriceData.price);
+            }
+          } catch (error) {
+            console.error(error);
+            // Handle error state if needed
+          }
+        };
+        
+        fetchPetrolPrice();
+      }, []); 
+      useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const vehicleType = hasVehicle ? userVehicleType : selectedVehicle;
+                console.log('veh',vehicleType)
+                console.log('selec vehic',selectedVehicle)
+                if (routeDistance && routeTime && vehicleType) {
+                    // Constants
+                    const AVERAGE_TIME_PER_KM = 80; // in seconds
+                    const AC_CHARGE_PER_KM = 5; // assuming this is 5 per km
+                    
+                    // Vehicle-specific fare components
+                    const fareComponents = {
+                        'ride': { baseFare: 40, distanceFare: 0.075, timeFare: 0.025 },
+                        'Ride': { baseFare: 40, distanceFare: 0.075, timeFare: 0.025 },
+                        'ride-mini': { baseFare: 25, distanceFare: 0.07, timeFare: 0.015 },
+                        'Ride Mini': { baseFare: 25, distanceFare: 0.07, timeFare: 0.015 },
+                        'bike': { baseFare: 15, distanceFare: 0.045, timeFare: 0.01 },
+                        'Bike': { baseFare: 15, distanceFare: 0.045, timeFare: 0.01 },
+                        'suv': { baseFare: 45, distanceFare: 0.08, timeFare: 0.03 },
+                        'SUV': { baseFare: 45, distanceFare: 0.08, timeFare: 0.03 },
+                    };
+                    
+                    if (!fareComponents[vehicleType]) {
+                        throw new Error("Invalid vehicle type");
+                    }
+    
+                    const fares = fareComponents[vehicleType];
+                    let distanceFare = fares.distanceFare * routeDistance;
+                    let expectedTime = routeDistance * AVERAGE_TIME_PER_KM;
+    
+                    let extraTimeSeconds = Math.max(0, routeTime - expectedTime);
+                    let extraTimeMinutes = extraTimeSeconds / 60;
+    
+                    let timeFare = fares.timeFare * extraTimeMinutes;
+    
+                    // AC fare calculation
+                    let acFare = ac ? AC_CHARGE_PER_KM * routeDistance : 0;
+    
+                    // Total fare calculation
+                    let fareEstimate = distanceFare + timeFare + acFare;
+    
+                    // Adjusting fare based on petrol price and seats
+                    fareEstimate *= petrolPrice;
+                    if (seats>1){
+                    fareEstimate *= (seats*0.60);
+                    }
+    
+                    setEstimatedFare(fareEstimate);
+                }
+            } catch (error) {
+                console.error('Error estimating fare:', error);
+            }
+        };
+    
+        fetchData();
+    }, [routeDistance, routeTime, selectedVehicle, ac, seats, hasVehicle, userVehicleType, petrolPrice]);
+    
+    
     const handleDirections = async () => {
         if (from && to) {
             const apiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
@@ -244,6 +339,7 @@ const RequestCreationScreen = () => {
     }, [])
 
     const handleUserTypeChange = (newValue) => {
+        setEstimatedFare(null) 
         setHasVehicle(newValue);
         setSelectedVehicle(null)
     };
@@ -258,7 +354,9 @@ const RequestCreationScreen = () => {
             music: music,
             gender: gender,
             ac: ac,
-            timestamp: Timestamp.now()
+            timestamp: Timestamp.now(),
+            routeTime,
+            routeDistance
         };
         if (!hasVehicle) {
             requestData.vehicleType = selectedVehicle;
@@ -281,11 +379,12 @@ const RequestCreationScreen = () => {
 
         }
     };
-    const handleLocationSet = (from,to) =>{
+    const handleLocationSet = (from, to, distance, time) => {
         setFrom(from)
         setTo(to)
+        setRouteDistance(distance/1000)
+        setRouteTime( parseFloat(time))
         setShowLocation(false)
-        console.log('ok')
     }
     const handleScheduleSet = (receivedSchedule, receivedStartDate, receivedEndDate, roundTrip) => {
         const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -331,26 +430,27 @@ const RequestCreationScreen = () => {
                             onClose={onClose}
                         /></View>)}
             {showLocation &&
-                (<View style={{ height: windowHeight+20, marginTop:5 }}>
+                (<View style={{ height: windowHeight + 20, marginTop: 5 }}>
                     <SetLocationScreen
                         onLocationSet={handleLocationSet}
                     />
                 </View>)}
 
             <View style={styles.container}>
-                {location && <MapView
+                <MapView
+                    ref={mapRef}
                     style={styles.map}
                     showsUserLocation={true}
                     followsUserLocation={true}
                     initialRegion={{
-                        latitude: location?.latitude,
-                        longitude: location?.longitude,
+                        latitude: 31.49481112274597,
+                        longitude: 74.29924883740347,
                         latitudeDelta: 0.02,
                         longitudeDelta: 0.03,
                     }}
                 >
 
-                </MapView>}
+                </MapView>
                 <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 10, position: 'absolute', top: 30, left: 10 }}>
                     <Icon type='font-awesome-5' name='bars' color={GlobalColors.primary} />
                 </TouchableOpacity>
@@ -384,58 +484,58 @@ const RequestCreationScreen = () => {
                             <View style={styles.inputContainer}>
                                 <Icon name='map-marker' type='font-awesome' color={GlobalColors.primary} />
                                 <ScrollView horizontal={true}>
-                                <Input
-                                    placeholder=" From"
-                                    value={from?.name}
-                                    inputContainerStyle={{ borderBottomWidth: 0 }}
-                                    containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
-                                    inputStyle={styles.input}
-                                    editable={false} 
-                                />
+                                    <Input
+                                        placeholder=" From"
+                                        value={from?.name}
+                                        inputContainerStyle={{ borderBottomWidth: 0 }}
+                                        containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
+                                        inputStyle={styles.input}
+                                        editable={false}
+                                    />
                                 </ScrollView>
                             </View>
                         </TouchableOpacity>
                         {fromError ? <Text style={{ color: 'red', fontSize: 12 }}>{fromError}</Text> : null}
 
                         <TouchableOpacity onPress={() => setShowLocation(true)}>
-                        <View style={styles.inputContainer}>
-                            <Icon name='search-location' type='font-awesome-5' color={GlobalColors.primary} />
-                            <ScrollView horizontal={true}>
-                               <Input
-                                placeholder="Where to?"
-                                inputContainerStyle={{ borderBottomWidth: 0 }}
-                                containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
-                                inputStyle={styles.input}
-                                editable={false}
-                                value={to?.name}
+                            <View style={styles.inputContainer}>
+                                <Icon name='search-location' type='font-awesome-5' color={GlobalColors.primary} />
+                                <ScrollView horizontal={true}>
+                                    <Input
+                                        placeholder="Where to?"
+                                        inputContainerStyle={{ borderBottomWidth: 0 }}
+                                        containerStyle={{ flex: 1, paddingTop: 5, height: 50 }}
+                                        inputStyle={styles.input}
+                                        editable={false}
+                                        value={to?.name}
 
-                            />
-                             </ScrollView>
-                            <TouchableOpacity onPress={() => setIsDropDownVisible(true)} style={{ flexDirection: 'row', borderWidth: 1, borderColor: GlobalColors.primary, borderRadius: 20, justifyContent: 'center', alignItems: 'center', padding: 5 }}>
-                                <Icon name='clock-o' type='font-awesome' color={GlobalColors.primary} />
-                                <Text style={{ marginHorizontal: 5 }}>{selectedSchedule}</Text>
-                                <Icon name='angle-down' type='font-awesome' color={GlobalColors.primary} />
-                            </TouchableOpacity>
-                            <Modal
-                                visible={isDropDownVisible}
-                                transparent={true}
-                                animationType='slide'
-                            >
-                                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-                                    <View style={{ backgroundColor: 'white', borderRadius: 10, padding: 20, minWidth: 200 }}>
-                                        <TouchableOpacity style={{ margin: 15 }} onPress={() => { setIsDropDownVisible(false); setSelectedSchedule('Now'); setSchedule(null) }}>
-                                            <Icon name='clock' type='font-awesome-5' color={GlobalColors.primary} />
-                                            <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Now</Text>
-                                        </TouchableOpacity>
-                                        <View style={{ backgroundColor: GlobalColors.primary, maxHeight: 2, flex: 1 }} />
-                                        <TouchableOpacity style={{ margin: 15 }} onPress={() => { setIsDropDownVisible(false); setShowSchedule(true) }}>
-                                            <Icon name='history' type='font-awesome' color={GlobalColors.primary} />
-                                            <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Prescheduled</Text>
-                                        </TouchableOpacity>
+                                    />
+                                </ScrollView>
+                                <TouchableOpacity onPress={() => setIsDropDownVisible(true)} style={{ flexDirection: 'row', borderWidth: 1, borderColor: GlobalColors.primary, borderRadius: 20, justifyContent: 'center', alignItems: 'center', padding: 5 }}>
+                                    <Icon name='clock-o' type='font-awesome' color={GlobalColors.primary} />
+                                    <Text style={{ marginHorizontal: 5 }}>{selectedSchedule}</Text>
+                                    <Icon name='angle-down' type='font-awesome' color={GlobalColors.primary} />
+                                </TouchableOpacity>
+                                <Modal
+                                    visible={isDropDownVisible}
+                                    transparent={true}
+                                    animationType='slide'
+                                >
+                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                                        <View style={{ backgroundColor: 'white', borderRadius: 10, padding: 20, minWidth: 200 }}>
+                                            <TouchableOpacity style={{ margin: 15 }} onPress={() => { setIsDropDownVisible(false); setSelectedSchedule('Now'); setSchedule(null) }}>
+                                                <Icon name='clock' type='font-awesome-5' color={GlobalColors.primary} />
+                                                <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Now</Text>
+                                            </TouchableOpacity>
+                                            <View style={{ backgroundColor: GlobalColors.primary, maxHeight: 2, flex: 1 }} />
+                                            <TouchableOpacity style={{ margin: 15 }} onPress={() => { setIsDropDownVisible(false); setShowSchedule(true) }}>
+                                                <Icon name='history' type='font-awesome' color={GlobalColors.primary} />
+                                                <Text style={{ marginVertical: 5, fontSize: 18, textAlign: 'center' }}>Prescheduled</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                </View>
-                            </Modal>
-                        </View>
+                                </Modal>
+                            </View>
                         </TouchableOpacity>
 
                         {toError ? <Text style={{ color: 'red', fontSize: 12 }}>{toError}</Text> : null}
@@ -459,7 +559,7 @@ const RequestCreationScreen = () => {
                         <View style={styles.inputContainer}>
                             <Icon name="money-bill-wave" type="font-awesome-5" color={GlobalColors.primary} />
                             <Input
-                                placeholder="Offer your Fare"
+                                placeholder={estimatedFare !== null ? `Offer your Fare (PKR ${estimatedFare.toFixed(0)})` : 'Offer your Fare'} 
                                 inputContainerStyle={{ borderBottomWidth: 0 }}
                                 containerStyle={{ flex: 1, height: 50, paddingTop: 5 }}
                                 inputStyle={styles.input}

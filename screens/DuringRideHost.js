@@ -12,7 +12,7 @@ import { collection } from 'firebase/firestore';
 import FeedbackHost from '../components/FeedbackHost';
 import { useSelector, useDispatch } from 'react-redux';
 import * as Location from 'expo-location';
-import { setLoading, setConfirmedWayPoints, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints, setCancelledByMe, setCancelledRiders, setRideEnded, setShowDirections } from '../context/actions/rideActions';
+import { setLoading, setConfirmedWayPoints, setRideDetails, setDistance, setDuration, setFromRideLocation, setToRideLocation, setFare, setDriverInfo, setCoriders, setWayPoints, setCancelledByMe, setCancelledRiders, setRideEnded, setShowDirections, incMinutesPassed } from '../context/actions/rideActions';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import MapViewDirections from 'react-native-maps-directions';
@@ -52,6 +52,7 @@ const DuringRideHost = () => {
   const confirmedWaypoints = useSelector(state => state.ride.confirmedWayPoints);
   const cancelledRiders = useSelector(state => state.ride.cancelledRiders);
   const showDirection = useSelector(state => state.ride.showDirections);
+  const minutesPassed = useSelector(state => state.ride.minutesPassed);
   const navigation = useNavigation();
   const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
   const mapRef = useRef();
@@ -62,11 +63,11 @@ const DuringRideHost = () => {
   const [notification, setNotification] = useState(false);
   const [rerouteLocation, setRerouteLocation] = useState(null);
   const [timeLeft, setTimeLeft] = useState(5 * 60);
-  const [showTimerPopup, setShowTimerPopup] = useState(true);
+  const [showTimerPopup, setShowTimerPopup] = useState(false);
   const notificationListener = useRef();
   const responseListener = useRef();
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
+  const [targetTime, setTargetTime] = useState(null);
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
@@ -84,7 +85,23 @@ const DuringRideHost = () => {
       Notifications.removeNotificationSubscription(responseListener.current);
     };
   }, []);
+  const stopLocationUpdates = async () => {
 
+    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+    if (isTaskRegistered) {
+      await Location.stopLocationUpdatesAsync(YOUR_TASK_NAME);
+      console.log('Location updates stopped.');
+    } else {
+      console.log('Task is not registered.');
+    }
+    const isTaskRegisteredRider = await TaskManager.isTaskRegisteredAsync('rider-background-location-task');
+    if (isTaskRegisteredRider) {
+      await Location.stopLocationUpdatesAsync('rider-background-location-task');
+      console.log('Location updates stopped.');
+    } else {
+      console.log('Task is not registered.');
+    }
+  };
   async function registerForPushNotificationsAsync() {
     let token;
 
@@ -152,7 +169,14 @@ const DuringRideHost = () => {
     }
 
     try {
+      await stopLocationUpdates();
       await Location.startLocationUpdatesAsync(YOUR_TASK_NAME, options);
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
+      if (isTaskRegistered) {
+        console.log('Location updates fine.');
+      } else {
+        console.log('Task is not registered.');
+      }
       //  await registerBackgroundFetchAsync()
       console.log('Started receiving location updates.');
     } catch (error) {
@@ -190,15 +214,17 @@ const DuringRideHost = () => {
               const updatedWaypoints = [...confirmedWaypoints];
               updatedWaypoints[confirmedWaypoints.length - 1][1] = true;
               dispatch(setConfirmedWayPoints(updatedWaypoints));
+
               // Navigate to next
-              if (showDirection){
-              const index = wayPoints.findIndex(w => w === wp);
-              if (index == -1) {
-                Linking.openURL(`google.navigation:q=${toRideLocation.latitude},${toRideLocation.longitude}&mode=d`)
-              } else {
-                Linking.openURL(`google.navigation:q=${wayPoints[index].latitude},${wayPoints[index].longitude}&mode=d`)
+              if (showDirection) {
+                const index = wayPoints.findIndex(w => w === wp);
+                if (index == -1) {
+
+                  Linking.openURL(`google.navigation:q=${toRideLocation.latitude},${toRideLocation.longitude}&mode=d`)
+                } else {
+                  Linking.openURL(`google.navigation:q=${wayPoints[index].latitude},${wayPoints[index].longitude}&mode=d`)
+                }
               }
-            }
             },
           },
         ],
@@ -300,7 +326,7 @@ const DuringRideHost = () => {
     const fetchData = async () => {
       dispatch(setLoading(true));
       try {
-        const rideDocRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+        const rideDocRef = doc(collection(firestoreDB, 'ride'), rideID);
         const unsubscribe = onSnapshot(rideDocRef, async (rideSnapshot) => {
           try {
             const rideData = rideSnapshot.data();
@@ -426,11 +452,44 @@ const DuringRideHost = () => {
       console.error('Error updating ride status:', error);
     }
   };
-
+  const updateRiderFares = async () => {
+    console.log('decreasing fare...')
+    try {
+      const docRef = doc(collection(firestoreDB, 'ride'), rideID);
+      const document = await getDoc(docRef);
+  
+      if (document.exists) {
+        const data = document.data();
+        const riders = data.Riders || [];
+  
+        // Update the fare for each rider
+        const updatedRiders = riders.map(rider => {
+          if (rider.fare !== undefined) {
+            return {
+              ...rider,
+              fare: rider.fare - 10
+            };
+          }
+          return rider;
+        });
+  
+        // Update the document with the modified riders array
+        await updateDoc(docRef,{ Riders: updatedRiders });
+  
+        console.log('Fares updated successfully.');
+      } else {
+        console.log('Document does not exist.');
+      }
+    } catch (error) {
+      console.error('Error updating fares: ', error);
+    }
+  };
+  
+  
   const cancelRider = async (rider) => {
     try {
       dispatch(setCancelledRiders([...cancelledRiders, rider._id]))
-      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
       const updatedRiders = [...rideDetails.Riders];
       for (let i = 0; i < rideDetails.Riders.length; i++) {
         if (rider._id == rideDetails.Riders[i]) {
@@ -502,18 +561,75 @@ const DuringRideHost = () => {
   };
 
   useEffect(() => {
-    setTimer();
-  }, []);
-  const setTimer = () => {
-    setShowTimerPopup(true)
-    setTimeLeft(1 * 60)
-    const interval = setInterval(() => {
-      setTimeLeft((prevTimeLeft) => {
-        return prevTimeLeft - 1;
-      });
-    }, 1000)
-    return () => clearInterval(interval);
+    if (!isLoading) {
+      setTimer();
+    }
+  }, [isLoading]);
+
+  async function scheduleFareDecreaseNotification() {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        sound: 'default',
+        title: `Time's Up`,
+        body: `Waiting time has exceeded. Fare of riders will decrease per minute.`,
+        data: { data: 'goes here' },
+      },
+      trigger: { seconds: 1 },
+    });
+    showFareDecreaseAlert();
   }
+  
+  const showFareDecreaseAlert =()=> {
+    console.log('ALERT')
+    Alert.alert(
+      "Time's Up",
+      `Waiting time has exceeded. Fare of all riders will decrease per minute.`,
+      undefined,
+      { cancelable: false }
+    );
+  }
+ 
+
+  const setTimer = () => {
+    setShowTimerPopup(true);
+
+    // Get the current time
+    const currentTime = new Date();
+
+    // Set the target time 5 minutes from the current time
+    const targetTime = new Date(currentTime.getTime() + 0.5 * 60000); // Adding 5 minutes in milliseconds
+    setTargetTime(targetTime)
+  }
+
+  useEffect(() => {
+
+    if (targetTime && showTimerPopup) {
+    const interval = setTimeout(() => {
+      // Get the current time
+      const currentTime = new Date();
+
+      // Calculate the time difference in milliseconds
+      const timeDifference = targetTime - currentTime;
+      console.log(timeDifference)
+      if (timeDifference<0){
+        
+        console.log('time pass',(-timeDifference) / 60000 )
+        console.log('min pass',minutesPassed)
+        if((-timeDifference) / 60000 > minutesPassed){
+          console.log('time to update...')
+          updateRiderFares();
+          dispatch(incMinutesPassed());
+        }
+      }
+      // Convert time difference from milliseconds to seconds
+      setTimeLeft(Math.floor(timeDifference / 1000));
+      if (Math.abs(timeDifference/1000) < 0.9){
+        scheduleFareDecreaseNotification()
+      }
+    }, 1000); // Update the timer every 0.1 second
+  }
+  },[targetTime, timeLeft]);
+
 
   return (
     <>
@@ -527,10 +643,10 @@ const DuringRideHost = () => {
         {showTimerPopup &&
           <View style={{ backgroundColor: 'red', padding: 10, borderRadius: 10 }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: GlobalColors.background, marginLeft: 'auto' }}>
-              Waiting Time: 
+              Waiting Time:
               {timeLeft >= 0 ?
                 ` 0${Math.floor(timeLeft / 60)}:${timeLeft % 60 < 10 ? `0${timeLeft % 60}` : timeLeft % 60}` :
-                ` -0${Math.abs(Math.floor(-1*timeLeft / 60))}:${Math.abs(timeLeft % 60) < 10 ? `0${Math.abs(timeLeft % 60)}` : Math.abs(timeLeft % 60)}`}
+                ` -0${Math.abs(Math.floor(-1 * timeLeft / 60))}:${Math.abs(timeLeft % 60) < 10 ? `0${Math.abs(timeLeft % 60)}` : Math.abs(timeLeft % 60)}`}
             </Text>
           </View>}
         <MapView

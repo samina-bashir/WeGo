@@ -14,7 +14,7 @@ const PayNowOverlay = ({ totalAmount, host, riders, rideID }) => {
     const [isOverlayVisible, setOverlayVisible] = useState(true);
     const [isVisible, setVisible] = useState(false);
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
-    const currentUser = useSelector((state) => state.user.user);
+    const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' }//useSelector((state) => state.user.user);
    {/* useEffect(() => {
         const timer = setTimeout(() => {
             setOverlayVisible(true);
