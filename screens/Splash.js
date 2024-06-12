@@ -17,21 +17,29 @@ const SplashScreen = () => {
     const dispatch = useDispatch()
     const checkLoggedUser = async () => {
         firebaseAuth.onAuthStateChanged((userCred) => {
+            
+            if (userCred?.email == 'admin@wego.com') {
+                console.log('admin', userCred)
+                navigation.replace('Admin')
+            }
             if (userCred?.uid) {
                 try {
+
                     getDoc(doc(firestoreDB, "users", userCred?.uid)).then((docSnap) => {
                         if (docSnap.exists()) {
                             console.log(docSnap.data());
                             dispatch(SET_USER(docSnap.data()))
                             const email = docSnap.data().email;
                             const domain = email.substring(email.lastIndexOf("@") + 1);
+                            console.log(email)
+                            console.log(docSnap.data())
                             const orgRef = doc(firestoreDB, 'organizations', domain);
-            
+
                             // Get the document
                             getDoc(orgRef).then((docSnapshot) => {
                                 if (docSnapshot.exists()) {
                                     docSnap.data().orgName = docSnapshot.data().Name;
-                                    if ( docSnapshot.data().status=='rejected') {
+                                    if (docSnapshot.data().status == 'rejected') {
                                         navigation.replace('Suspended Domain')
                                     }
                                 }
@@ -48,6 +56,8 @@ const SplashScreen = () => {
                                 } else if (docSnap.data().status == 'Verified') {
                                     console.log('ok2')
                                     navigation.replace("RequestCreation")
+                                } else {
+                                    console.log('ERRORRSSS')
                                 }
                             }, 1000)
                         }
@@ -70,7 +80,7 @@ const SplashScreen = () => {
                 source={require('../assets/logo.png')}
                 style={{ width: 300, height: 130, resizeMode: 'contain' }}
             />
-            <Text style={{fontSize:19, color: GlobalColors.secondary,fontWeight:'bold',fontStyle:'italic',marginBottom:50}}>Making Miles Meaningful.</Text>
+            <Text style={{ fontSize: 19, color: GlobalColors.secondary, fontWeight: 'bold', fontStyle: 'italic', marginBottom: 50 }}>Making Miles Meaningful.</Text>
             <ActivityIndicator size={"large"} color={GlobalColors.secondary} />
         </View>
     )

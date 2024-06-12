@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking } from 'react-native';
-import { collection, query, doc, getDocs, getDoc,runTransaction } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, runTransaction,onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
-import { Avatar, Icon } from 'react-native-elements';
+import { Avatar, Icon, Input, Switch } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Modal } from 'react-native';
+import Picker from '../components/Picker';
 import CoriderModal from '../components/CoridersModal';
+import { useSelector } from 'react-redux';
+import { ActivityIndicator } from 'react-native';
+
 
 const ResponseHost  = ({ route }) => {
+    console.log('in responses hosts : '); 
     const { ReqId } = route.params;
     console.log('in parameter req id is : ', ReqId); //reqId is actually rider req id findHostReqId
-    let hostReqId = null; // Declare a regular variable
+    let hostReqId = null; 
     let updatedfare=null;
+    let globalRideDoc = null;
+    let globalRideRef = null;
+
     // console.log('in parameter HostReqId  id of host is : ', hostReqId);
     const [declinedRequests, setDeclinedRequests] = useState([]);
     const userId='FZxbp2UoJxThVSBIjIIbGEA3Z202';
@@ -25,6 +33,8 @@ const ResponseHost  = ({ route }) => {
 
     const navigation = useNavigation();
     const [responsesHostData,setResponsesHostData]=useState([]);
+    const [loading, setLoading] = useState(true);
+    const [noPendingResponses, setNoPendingResponses] = useState(false);
 
 
 
@@ -36,82 +46,107 @@ useEffect(() => {
 
             if (!querySnapshot.exists()) {
                 console.log('No matching document found for responses');
+                setNoPendingResponses(true);
+                setLoading(false)
                 setResponsesHostData([]);
                 return;
             }
 
             const response_ = querySnapshot.data().responsesHost;
+            console.log(response_)
             if (response_) {
-                setResponsesHostData(response_);
+                const pendingResponses = response_.filter(res => res.status === 'pending');
+                setResponsesHostData(pendingResponses);
+
+
+                if (pendingResponses.length === 0) {
+                    setNoPendingResponses(true);
+                    setLoading(false);
+
+                }
+                else{
+                    const updatedResponsesData = [];
+                    for (const res of response_) {
+                        const responseBy_ = res?.responseBy;
+                        console.log('response by is ',responseBy_);
+                        hostReqId = res?.requestId;
+                        console.log(' res is  ',res )
+                        const userRef = doc(firestoreDB, 'users', responseBy_);
+                        const userSnapshot = await getDoc(userRef);
+                        const userData = userSnapshot.exists() ? userSnapshot.data() : {};
+        
+                        console.log('In fetch data host id to find in ride is ',hostReqId )
+                        const coriderRef = doc(firestoreDB, 'ride', 'Ri5o1r474TkoTNC0XUZ6');
+                        const coriders = await getDoc(coriderRef);
+                        const coR = coriders.exists() ? coriders.data().Riders : {};
+        
+                          //  if (userData.driver) {
+                        const driverInfoRef = doc(firestoreDB, 'driverInfo', responseBy_);
+                        const driverInfoSnapshot = await getDoc(driverInfoRef);
+                        const driverInfo = driverInfoSnapshot.exists() ? driverInfoSnapshot.data() : {};
+                     
+                    
+                //  }
+         
+        
+                         // Create Firestore document reference
+                 const email = userData.email;
+                 const domain = email.substring(email.lastIndexOf("@") + 1);
+                 const orgRef = doc(firestoreDB, 'organizations', domain);
+                 console.log('orgRef is : ',orgRef)
+        
+                 // Get the document
+                 getDoc(orgRef).then((docSnapshot) => {
+                     if (docSnapshot.exists()) {
+                        userData.orgName = docSnapshot.data().Name;
+                         if (userData.orgName == '') {
+                            userData.orgName = 'Unverified Institute'
+                         }
+                         console.log("Organization Name:", userData.orgName);
+                     } else {
+                        userData.orgName = 'Unverified Institute';
+                         console.log("No organization found for domain:", domain);
+                     }
+                 }).catch((error) => {
+                     console.error("Error getting organization:", error);
+                 });
+        
+                 // Retrieve additional data from 'driverInfo' collection (if applicable)
+        
+        
+        
+                        updatedResponsesData.push({
+                            fare: res.fare,
+                            from: res.from,
+                            to: res.to,
+                            status: res.status,
+                            responseBy:res.responseBy,
+                            requestId: res.requestId,
+                            hostReqId: res.requestId, //host id 
+                            orgName:userData.orgName,
+                            userData: userData,
+                            coriders: coR,
+                            driverInfo:driverInfo,
+                            seats:res.seats,
+                            // make:driverInfo.make,
+                            // model:driverInfo.model,
+                        });
+                        console.log('host req id is ', hostReqId)
+                    }
+        
+                    setResponsesHostData(updatedResponsesData);
+                    setLoading(false);
+
+
+                }
             } else {
                 console.log('responses array not found in the document');
                 setResponsesHostData([]);
+                setLoading(false)
+                setNoPendingResponses(true)
             }
 
-            const updatedResponsesData = [];
-            for (const res of response_) {
-                const responseBy_ = res?.responseBy;
 
-                const userRef = doc(firestoreDB, 'users', responseBy_);
-                const userSnapshot = await getDoc(userRef);
-                const userData = userSnapshot.exists() ? userSnapshot.data() : {};
-
-
-                const coriderRef = doc(firestoreDB, 'ride', 'Ri5o1r474TkoTNC0XUZ6');
-                const coriders = await getDoc(coriderRef);
-                const coR = coriders.exists() ? coriders.data().Riders : {};
-
-                  //  if (userData.driver) {
-                const driverInfoRef = doc(firestoreDB, 'driverInfo', responseBy_);
-                const driverInfoSnapshot = await getDoc(driverInfoRef);
-                const driverInfo = driverInfoSnapshot.exists() ? driverInfoSnapshot.data() : {};
-             
-            
-        //  }
- 
-
-                 // Create Firestore document reference
-         const email = userData.email;
-         const domain = email.substring(email.lastIndexOf("@") + 1);
-         const orgRef = doc(firestoreDB, 'organizations', domain);
-         console.log('orgRef is : ',orgRef)
-
-         // Get the document
-         getDoc(orgRef).then((docSnapshot) => {
-             if (docSnapshot.exists()) {
-                userData.orgName = docSnapshot.data().Name;
-                 if (userData.orgName == '') {
-                    userData.orgName = 'Unverified Institute'
-                 }
-                 console.log("Organization Name:", userData.orgName);
-             } else {
-                userData.orgName = 'Unverified Institute';
-                 console.log("No organization found for domain:", domain);
-             }
-         }).catch((error) => {
-             console.error("Error getting organization:", error);
-         });
-
-         // Retrieve additional data from 'driverInfo' collection (if applicable)
-
-
-
-                updatedResponsesData.push({
-                    fare: res.fare,
-                    from: res.from,
-                    to: res.to,
-                    status: res.status,
-                    findRiderReqId: res.findRiderReqId,
-                    orgName:userData.orgName,
-                    userData: userData,
-                    coriders: coR,
-                    driverInfo:driverInfo,
-                    // make:driverInfo.make,
-                    // model:driverInfo.model,
-                });
-            }
-
-            setResponsesHostData(updatedResponsesData);
         } catch (error) {
             console.error('Error fetching responses:', error);
         }
@@ -120,64 +155,244 @@ useEffect(() => {
     fetchResponses();
 }, []);
 
+// async function checkAndSetRideDoc(hostReqId) {
+//     const rideRef = doc(collection(firestoreDB, 'ride'), hostReqId);
+//     const rideDoc = await getDoc(rideRef);
 
-// const updatefare = async (item) => {
-//     try {
-//         // Assuming firestoreDB is your Firestore database instance
-//         const findHostRequestRef = doc(collection(firestoreDB, 'findHostRequests'), ReqId);
-//         const findHostRequestDoc = await getDoc(findHostRequestRef);
+//     if (rideDoc.exists()) {
+//         globalRideDoc = rideDoc;
+//         globalRideRef= rideRef;
+//         return true;
+//     } else {
+//         globalRideDoc = null;
+//         globalRideRef= null;
 
-//         if (findHostRequestDoc.exists()) {
-//             const riderFare = findHostRequestDoc.data().fare;
-//             let fare;
-//             if (riderFare > item.fare) {
-//                 fare = item.fare;
-//             } else {
-//                 fare = riderFare;
-//                 item.fare = item.fare * 0.40;
-
-//                 const findHostRequestRef = doc(collection(firestoreDB, 'findHostRequests'), item.findRiderReqId);
-//                 await runTransaction(firestoreDB, async (transaction) => {
-//                     const findHostRequestDoc = await transaction.get(findHostRequestRef);
-//                     if (findHostRequestDoc.exists()) {
-//                         transaction.update(findHostRequestRef, { fare: item.fare });
-//                     } else {
-//                         console.log('findRiderRequest document does not exist.');
-//                     }
-//                 });
-//             }
-//             return fare;
-//         } else {
-//             console.log('Host request document does not exist.');
-//             return null; // or any default value indicating failure
-//         }
-//     } catch (error) {
-//         console.error('Error updating fare:', error);
-//         return null; // or any default value indicating failure
+//         return false;
 //     }
-// };
+// }
 
 
+const updatefare = async (item) => {
+    try {
+        // Assuming firestoreDB is your Firestore database instance
+        const findHostRequestRef = doc(collection(firestoreDB, 'findHostRequests'), ReqId);//riderid
+        const findHostRequestDoc = await getDoc(findHostRequestRef);
+
+        if (findHostRequestDoc.exists()) {
+            const riderFare = findHostRequestDoc.data().fare;
+            const rider_seats = findHostRequestDoc.data().seats;
+
+            var fare;
+            var hostFare;
+            var host_seats=item.seats;
+
+
+            // updated_seats 
+            console.log('item.seats ',item.seats)
+            var updated_seats;
+            updated_seats=host_seats-rider_seats;
+
+
+            // checkAndSetRideDoc(); //check if ride exists
+            // const rideRef = doc(collection(firestoreDB, 'ride'), hostReqId);
+            // const rideDoc = await getDoc(rideRef);
+            
+            const rideRef = doc(collection(firestoreDB, 'ride'), hostReqId);
+            const rideDoc = await getDoc(rideRef);
+            
+
+
+            if (riderFare > item.fare) { //item.fare is host ka fare
+                fare = item.fare; 
+
+
+                //coriders exists - ride exists  
+                if(rideDoc.exists())
+                {
+                    //decrease All R.Fare 60%
+                    const rideData = rideDoc.data();
+
+                        // Update fare for every rider in the Riders array
+                        const updatedRiders = rideData.Riders.map(rider => ({
+                            ...rider,
+                            fare: rider.fare * 0.60
+                        }));
+
+                        // Update the document with the modified Riders array
+                        await updateDoc(rideRef, { Riders: updatedRiders });
+                        console.log('Rider fares updated successfully');
+                } 
+                // else 
+                // {
+                //         console.log('Ride document does not exist, no coriders ');
+                // }
+            
+
+            } else {// if RFare<hostFare
+                fare = riderFare;
+
+                 //coriders exists - ride exists  
+                 if(rideDoc.exists())
+                 {
+                     //decrease All R.Fare 20%
+                     const rideData = rideDoc.data();
+ 
+                         // Update fare for every rider in the Riders array 
+                         const updatedRiders = rideData.Riders.map(rider => ({
+                             ...rider,
+                             fare: rider.fare * 0.80
+                         }));
+ 
+                         // Update the document with the modified Riders array
+                         await updateDoc(rideRef, { Riders: updatedRiders });
+                         console.log('Rider fares updated successfully in else part');
+                 } 
+                
+
+            }
+
+            item.fare = item.fare * 0.60;
+            hostFare=item.fare;
+ 
+                const findRiderRequestRef = doc(collection(firestoreDB, 'findRiderRequests'),  item.requestId);//host req id
+                await runTransaction(firestoreDB, async (transaction) => {
+                    const findRiderRequestDoc = await transaction.get(findRiderRequestRef);
+                    if (findRiderRequestDoc.exists()) {
+                        // transaction.update(findRiderRequestRef, { fare: hostFare });
+                        // transaction.update(findRiderRequestRef, { fare: hostFare });
+
+                        const updateData = { fare: hostFare, seats: updated_seats };
+                        if (updated_seats < 1) {
+                            updateData.currently = 'closed';
+                            updateData.seats = 0;
+                        }
+                        // Perform the update
+                        transaction.update(findRiderRequestRef, updateData);
+                    } else {
+                        console.log('findRiderRequest document does not exist.');
+                    }
+                });
+
+                console.log('fare is ', fare )
+                console.log('host fare is ', hostFare )
+
+            
+            return Math.floor(fare);
+        } else {
+            console.log('Host request document does not exist.');
+            return null; // or any default value indicating failure
+        }
+    } catch (error) {
+        console.error('Error updating fare:', error);
+        return null; // or any default value indicating failure
+    }
+};
+
+
+async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFare, responseBy) {
+    const rideRef = doc(collection(firestoreDB, 'ride'), hostReqId);
+    const rideDoc = await getDoc(rideRef);
+
+    if (rideDoc.exists()) {
+        const rideData = rideDoc.data();
+        const updatedRiders = [...rideData.Riders, {
+            from: itemfrom,
+            to: itemto,
+            status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
+            fare: updatedFare,
+            paid: false,
+            rider: responseBy
+        }];
+
+        await updateDoc(rideRef, { Riders: updatedRiders });
+        console.log('rider added')
+    } else {
+        
+        const findRiderReqDoc = await getDoc(doc(collection(firestoreDB, 'findRiderRequests'), hostReqId));
+        if (findRiderReqDoc.exists()) {
+            const data = findRiderReqDoc.data();
+            console.log({
+                from: data.from,
+                to: data.to,
+                Host: data.createdBy,
+                Riders: [{
+                    from: itemfrom,
+                    to: itemto,
+                    status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
+                    fare: updatedFare,
+                    paid: false,
+                    rider: responseBy
+                }]
+            })
+            await setDoc(rideRef, {
+                from: data.from,
+                to: data.to,
+                Host: data.createdBy,
+                Riders: [{
+                    from: itemfrom,
+                    to: itemto,
+                    status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
+                    fare: updatedFare,
+                    paid: false,
+                    rider: responseBy
+                }]
+            });
+            console.log('done')
+        } else {
+            console.log(`No document found with id ${hostReqId} in findRiderRequests collection.`);
+        }
+    }
+}
 
 
         const onPressAccept = async (item) => {
             try {
-                const requestRef = doc(firestoreDB, 'responsesHost', ReqId);
+                console.log('at start item is ',item);
+                hostReqId=item.requestid;
+                console.log('rider req id is :', ReqId)
+
+                const requestRef = doc(firestoreDB, 'responsesHost', ReqId);//ReqId is rider's id , ddoc id of responsesHost
                 await runTransaction(firestoreDB, async (transaction) => {
                     const docSnapshot = await transaction.get(requestRef);
                     if (docSnapshot.exists) {
                         const responsesHost = docSnapshot.data().responsesHost;
-                        console.log('findRiderReqId is ',item.findRiderReqId )
-                        const index = responsesHost.findIndex((response) => response.findRiderReqId === item.findRiderReqId);
+                        // console.log('findRiderReqId is ',item.requestId )//hostid
+                        console.log('responsesHost aray ',responsesHost);
+                        console.log('item req id  ',item);
+
+                        const index = responsesHost.findIndex((response) => response.requestId === item.requestId);
+
+                        console.log('index s :', index)
+
                         if (index !== -1) {
                             responsesHost[index].status = 'confirmed';
                             transaction.update(requestRef, { responsesHost });
                             console.log('Response status updated successfully!');
-                            hostReqId =item.findRiderReqId;
+                            hostReqId =item.requestId;
                             console.log('Host in thi case Req ',hostReqId);
+                            updatedfare = updatefare(item);
+                            console.log('Result of updatefare:', updatedfare);
 
-                            // updatedfare = updatefare(item);
-                            // console.log('Result of updatefare:', updatedfare);
+                          updatedfare = await updatefare(item);
+                        //   console.log('item.seats are ', );
+
+
+                          console.log('Result of updatefare:', updatedfare);
+                          hostReqId=item.requestId;
+                          console.log('host req id in accept is :', hostReqId);
+
+                            updateRideInfo(
+                                hostReqId,
+                                item.from,
+                                item.to,
+                                item.status,
+                                updatedfare, //actually updatedfare swnd krna h
+                                item.responseBy,
+                                
+                            
+                            )
+                            console.log('before nav')
+                             navigation.navigate('DuringRide',  { requestId: hostReqId });
 
 
 
@@ -284,11 +499,11 @@ useEffect(() => {
                 <View style={{ paddingHorizontal: 10 }}>
                     <View style={{ flexDirection: 'row' }}>
                         <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                        <Text style={styles.text}> From: {item.from} </Text>
+                        <Text style={styles.text}> From: {item.from.name} </Text>
                     </View>
                     <View style={{ flexDirection: 'row' }}>
                         <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                        <Text style={styles.text}> To: {item.to} </Text>
+                        <Text style={styles.text}> To: {item.to.name} </Text>
                     </View>
                 </View>
                 <View style={{ flexDirection: 'row' }}>
@@ -297,7 +512,7 @@ useEffect(() => {
                           >
                         <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => {onPressDecline(item)
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {onPressDecline(item)
                     setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
                 }}>
                     
@@ -312,17 +527,38 @@ useEffect(() => {
     return (
         <View style={styles.container}>
             <Text style={styles.heading}>Hosts' Responses</Text>
-                        {/* {isLoading ? (
-                <ActivityIndicator style={styles.loader} size="large" color={GlobalColors.primary} />
-            ) : ( */}
+            {loading ? (
+            
+            <ActivityIndicator size="large" color={GlobalColors.primary} marginTop='120' />
+        ) : noPendingResponses ? (
+                <Text style={styles.noResponsesText}>No responses for now</Text>
+            ) : (
             <FlatList
                 data={responsesHostData}
                 renderItem={renderRequestItem}
-                keyExtractor={item => item.id}             />
+                keyExtractor={item => item.id}       />
+            )}
+                
 
-             {/* )} */}
         </View>
-    );
+
+
+   /* <View style={styles.container}>
+        <Text style={styles.heading}>Riders' Responses</Text>
+        {loading ? (
+            
+            <ActivityIndicator size="large" color="#0c2442" marginTop='120' />
+        ) : noPendingResponses ? (
+                <Text style={styles.noResponsesText}>No responses for now</Text>
+            ) : (
+                <FlatList
+                    data={responsesdata}
+                    renderItem={renderRequestItem}
+                    keyExtractor={item => item.requestId}
+                />
+            )}
+        </View> */
+    )
 };
 
 const styles = StyleSheet.create({
@@ -338,12 +574,29 @@ const styles = StyleSheet.create({
         marginTop: '7%',
         paddingHorizontal: 20
     },
+    filterContainer: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginBottom: 10,
+    },
+    filterButton: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        marginRight: 10,
+        flexDirection: 'row'
+    },
     card: {
         backgroundColor: GlobalColors.background,
         borderRadius: 10,
         padding: 5,
         marginBottom: 5,
         marginHorizontal: 10
+    },
+    modalText: {
+        fontSize: 18,
+        marginVertical: 20,
+        textAlign: 'center',
+        paddingHorizontal: 20
     },
     profileSection: {
         flexDirection: 'row',
@@ -372,13 +625,9 @@ const styles = StyleSheet.create({
     },
     text: {
         fontSize: 14,
-        fontWeight:'bold',
-        marginLeft:8,
     },
     textMini: {
         fontSize: 10,
-        marginLeft:9,
-        color:GlobalColors.tertiary,
     },
     textMed: {
         fontSize: 12,
@@ -395,6 +644,60 @@ const styles = StyleSheet.create({
         marginHorizontal: 5,
         fontStyle: 'italic'
     },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+        backgroundColor: GlobalColors.background,
+        borderRadius: 10,
+        padding: 20,
+        width: '80%',
+    },
+    closeButton: {
+        alignSelf: 'flex-end',
+    },
+    modalHeading: {
+        fontWeight: 'bold',
+        fontSize: 20,
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    filterItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 5,
+        marginHorizontal: 7
+    },
+    filterText: {
+        fontSize: 16,
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: GlobalColors.primary,
+        paddingHorizontal: 8,
+        borderRadius: 5,
+        textAlign: 'center'
+    },
+    inputContainer: {
+        borderRadius: 10,
+        borderColor: GlobalColors.primary,
+        width: 65,
+        height: 40,
+        marginLeft: 2
+    },
+    noResponsesText:{
+        color:GlobalColors.secondary,
+        justifyContent:'center',
+        alignItems:'center',
+        fontWeight:'bold',
+        margin:'15%',
+        marginTop:'60%',
+        fontSize:25,
+
+    }
 });
 
 export default ResponseHost;

@@ -36,7 +36,8 @@ const DuringRideScreen = () => {
   };
   const notificationListener = useRef();
   const responseListener = useRef();
-  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2', name: 'Samina' } //useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
+  //{ _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2', name: 'Samina' } //
   const isLoading = useSelector(state => state.ride.isLoading);
   const rideDetails = useSelector(state => state.ride.rideDetails);
   const distance = useSelector(state => state.ride.distance);
@@ -56,7 +57,7 @@ const DuringRideScreen = () => {
   const [driverData, setDriverData] = useState(null);
   const [rerouteLocation, setRerouteLocation] = useState(null);
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const rideID = useRoute.params?.requestId;
+  const rideID = useRoute().params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
   const YOUR_TASK_NAME = 'rider-background-location-task';
@@ -622,7 +623,7 @@ const DuringRideScreen = () => {
   };
 
   const handleMapReady = () => {
-    setIsMapReady(false);
+    setIsMapReady(true);
 
   };
 

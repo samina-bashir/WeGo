@@ -30,16 +30,17 @@ const SetLocationScreen = ({ onLocationSet }) => {
 
       let { coords } = await Location.getCurrentPositionAsync({});
       setLocation(coords);
+      console.log('Got location')
 
     })();
   }, []);
 
   const adjustMapViewport = (coordinate1, coordinate2) => {
     if (coordinate1 && coordinate2) {
-      const minLat = Math.min(coordinate1.latitude, coordinate2.latitude);
-      const maxLat = Math.max(coordinate1.latitude, coordinate2.latitude);
-      const minLng = Math.min(coordinate1.longitude, coordinate2.longitude);
-      const maxLng = Math.max(coordinate1.longitude, coordinate2.longitude);
+      const minLat = Math.min(coordinate1?.latitude, coordinate2?.latitude);
+      const maxLat = Math.max(coordinate1?.latitude, coordinate2?.latitude);
+      const minLng = Math.min(coordinate1?.longitude, coordinate2?.longitude);
+      const maxLng = Math.max(coordinate1?.longitude, coordinate2?.longitude);
 
       const padding = 50; // Adjust the padding as needed
 
@@ -86,14 +87,14 @@ const SetLocationScreen = ({ onLocationSet }) => {
   const onMarkerDragEnd = (coordinate, type) => {
     if (type === 'from') {
       setFromDraggedLocation({
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
+        latitude: coordinate?.latitude,
+        longitude: coordinate?.longitude,
         name: 'Pickup Location'
       });
     } else {
       setToDraggedLocation({
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
+        latitude: coordinate?.latitude,
+        longitude: coordinate?.longitude,
         name: 'Dropoff Location'
       });
     }
@@ -116,13 +117,13 @@ const SetLocationScreen = ({ onLocationSet }) => {
       setToDraggedLocation(null)
     } else {
       if (!fromLocation)
-        setFromDraggedLocation({ latitude: location.latitude, longitude: location.longitude, name: 'Pickup Location' })
+        setFromDraggedLocation({ latitude: location?.latitude, longitude: location?.longitude, name: 'Pickup Location' })
       else
-        setFromDraggedLocation({ latitude: fromLocation.latitude, longitude: fromLocation.longitude, name: 'Pickup Location' })
+        setFromDraggedLocation({ latitude: fromLocation?.latitude, longitude: fromLocation?.longitude, name: 'Pickup Location' })
       if (!toLocation)
-        setToDraggedLocation({ latitude: location.latitude + 0.002, longitude: location.longitude + 0.003, name: 'Dropoff Location' })
+        setToDraggedLocation({ latitude: location?.latitude + 0.002, longitude: location?.longitude + 0.003, name: 'Dropoff Location' })
       else
-        setToDraggedLocation({ latitude: toLocation.latitude, longitude: toLocation.longitude, name: 'Dropoff Location' })
+        setToDraggedLocation({ latitude: toLocation?.latitude, longitude: toLocation?.longitude, name: 'Dropoff Location' })
 
     }
     setSelectFromMapMode(!selectFromMapMode);
@@ -139,7 +140,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
       if (fromLocation.name == 'Current Location') {
         try {
           const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${fromLocation.latitude},${fromLocation.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${fromLocation?.latitude},${fromLocation?.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
           );
           console.log(response.data)
           // Parse the response and extract the formatted address
@@ -152,7 +153,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
       if (toLocation.name == 'Current Location') {
         try {
           const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${toLocation.latitude},${toLocation.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${toLocation?.latitude},${toLocation?.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
           );
           console.log(response.data)
           // Parse the response and extract the formatted address
@@ -174,7 +175,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
       );
 
       const raw =
-        `{origin:{location: {latLng: {latitude: ${fromLocation.latitude}, longitude: ${fromLocation.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toLocation.latitude},       longitude: ${toLocation.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: true,  languageCode: "en-US",  units: "IMPERIAL"}`;
+        `{origin:{location: {latLng: {latitude: ${fromLocation?.latitude}, longitude: ${fromLocation?.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toLocation?.latitude},       longitude: ${toLocation?.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: true,  languageCode: "en-US",  units: "IMPERIAL"}`;
 
       const requestOptions = {
         method: "POST",
@@ -204,7 +205,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
 
       try {
         const response = await axios.get(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${fromDraggedLocation.latitude},${fromDraggedLocation.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${fromDraggedLocation?.latitude},${fromDraggedLocation?.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
         );
         console.log(response.data)
         // Parse the response and extract the formatted address
@@ -215,7 +216,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
       }
       try {
         const response = await axios.get(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${toDraggedLocation.latitude},${toDraggedLocation.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${toDraggedLocation?.latitude},${toDraggedLocation?.longitude}&key=AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8`
         );
         console.log(response.data)
         // Parse the response and extract the formatted address
@@ -236,7 +237,7 @@ const SetLocationScreen = ({ onLocationSet }) => {
       );
 
       const raw =
-        `{origin:{location: {latLng: {latitude: ${fromDraggedLocation.latitude}, longitude: ${fromDraggedLocation.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toDraggedLocation.latitude},       longitude: ${toDraggedLocation.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: false,  languageCode: "en-US",  units: "IMPERIAL"}`;
+        `{origin:{location: {latLng: {latitude: ${fromDraggedLocation?.latitude}, longitude: ${fromDraggedLocation?.longitude}}}},  destination: {    location: {     latLng: {        latitude: ${toDraggedLocation?.latitude},       longitude: ${toDraggedLocation?.longitude}          }      }   },  travelMode: "DRIVE",  routingPreference: "TRAFFIC_AWARE", computeAlternativeRoutes: false,  languageCode: "en-US",  units: "IMPERIAL"}`;
 
       const requestOptions = {
         method: "POST",

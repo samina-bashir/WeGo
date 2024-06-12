@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { firestoreDB } from '../config/firebase.config';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { firebaseAuth, firestoreDB } from '../config/firebase.config';
 import { collection, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { Icon, SearchBar } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
+import { SET_USER_NULL } from '../context/actions/userActions';
+import { useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 
 const VerifyDomains = () => {
     const [sortedDomains, setSortedDomains] = useState([]);
@@ -13,7 +16,22 @@ const VerifyDomains = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredNonRejectedDomains, setFilteredNonRejectedDomains] = useState([]);
     const [filteredRejectedDomains, setFilteredRejectedDomains] = useState([]);
+    const dispatch = useDispatch();
+    const navigation = useNavigation();
 
+    const handleLogout = async () => {
+        console.log('Log out')
+        try {
+          await firebaseAuth.signOut();
+          dispatch(SET_USER_NULL());
+          navigation.navigate('Signin');
+          console.log('Logging Out')
+        } catch (error) {
+          console.error('Error signing out:', error.message);
+          Alert.alert('Error', 'An error occurred while signing out. Please try again.');
+        }
+      };
+    
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -161,6 +179,10 @@ const VerifyDomains = () => {
     return (
         <View style={styles.container}>
             <Text style={styles.heading}>Organizations</Text>
+            <TouchableOpacity style={{marginLeft:'auto', flexDirection: 'row'}} onPress={handleLogout}>
+            <Icon type='font-awesome-5' name='sign-out-alt' color={GlobalColors.primary} />
+            <Text style = {{color: GlobalColors.primary, fontSize: 18, fontWeight: 'bold', paddingHorizontal: 5}}>Log Out</Text>
+            </TouchableOpacity>
             <SearchBar
                 placeholder="Search Domains"
                 onChangeText={(text) => searchDomains(text)}
@@ -197,7 +219,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 30,
         color: GlobalColors.primary,
-        marginVertical: '7%',
+        marginTop: '10%',
     },
     title: {
         fontSize: 20,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking, ActivityIndicator } from 'react-native';
-import { collection, query, where, doc, getDocs, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, onSnapshot, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { Avatar, Icon, Input, Switch } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
@@ -11,7 +11,7 @@ import CoriderModal from '../components/CoridersModal';
 import { useSelector } from 'react-redux';
 
 const FindScheduledHost = () => {
-    const [isLoading, setIsLoading]= useState(true)
+    const [isLoading, setIsLoading] = useState(true)
     const [requests, setRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
     const navigation = useNavigation();
@@ -30,7 +30,7 @@ const FindScheduledHost = () => {
     const [showAcceptModal, setShowAcceptModal] = useState(false);
     const [selectedRequestId, setSelectedRequestId] = useState(null);
     const currentUser = useSelector((state) => state.user.user);
-    const myReqData =  useRoute().params;
+    const myReqData = useRoute().params;
     const response = {
 
         requestId: myReqData?.id,
@@ -42,25 +42,91 @@ const FindScheduledHost = () => {
         schedule: myReqData?.schedule,
         startDate: myReqData?.startDate,
         endDate: myReqData?.endDate,
-        seats: myReqData?.seats
+        seats: myReqData?.seats,
+        roundTrip: myReqData?.roundTrip
     };
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
+    const chechkWayPoints = async (fromLat, toLat, fromLong, toLong, routeTime) => {
+        try {
+            const myHeaders = new Headers();
+            myHeaders.append("Content-Type", "application/json");
+            myHeaders.append(
+                "X-Goog-Api-Key",
+                "AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8"
+            );
+            myHeaders.append(
+                "X-Goog-FieldMask",
+                "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
+            );
 
+            const raw = JSON.stringify({
+                origin: { location: { latLng: { latitude: fromLat, longitude: fromLong } } },
+                destination: { location: { latLng: { latitude: toLat, longitude: toLong } } },
+                travelMode: "DRIVE",
+                routingPreference: "TRAFFIC_AWARE",
+                computeAlternativeRoutes: false,
+                languageCode: "en-US",
+                units: "IMPERIAL",
+                intermediates: [
+                    { location: { latLng: { latitude: myReqData?.from?.latitude, longitude: myReqData?.from?.longitude } } },
+                    { location: { latLng: { latitude: myReqData?.to?.latitude, longitude: myReqData?.to?.longitude } } }
+                ]
+            });
+            const requestOptions = {
+                method: "POST",
+                headers: myHeaders,
+                body: raw,
+                redirect: "follow",
+            };
+
+            const APIresponse = await fetch(
+                "https://routes.googleapis.com/directions/v2:computeRoutes",
+                requestOptions
+            )
+            const result = await APIresponse.json()
+
+            if (result.routes && result.routes.length > 0) {
+                // alert(parseInt(myReqData?.routeTime) +" : "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]))
+                console.log(result);
+                console.log(routeTime);
+                var threshHold = 99999999
+                let extraTime = 0
+                console.log(parseInt(result?.routes[0]?.duration?.split('s')[0]))
+                extraTime = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - routeTime)
+                threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - routeTime) * 100 / routeTime
+                // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
+                // alert(" th "+Math.round(threshHold))
+                console.log('thresh', threshHold);
+                console.log('extra', extraTime)
+                return threshHold;
+
+            } else {
+                console.log('result not ok', result)
+                return 999999
+            }
+        } catch (error) {
+            console.log("ERRORR", error)
+        }
+    }
     useEffect(() => {
         const fetchRequests = async () => {
             setIsLoading(true)
             const requestsCollection = collection(firestoreDB, 'findScheduledRiderRequests');
-            const q = query(requestsCollection);
+            const q = query(requestsCollection, where('createdBy', '!=', currentUser?._id), where('endDate', '>=', Timestamp.fromDate(new Date(myReqData.startDate))), where('currently', '==', 'active'), where('seats', '>=', myReqData?.seats));
 
             const querySnapshot = await getDocs(q);
             const requestsData = [];
+            if (querySnapshot?.docs.length == 0) {
+                setIsLoading(false)
+                console.log('no match found')
+            }
 
             for (const document of querySnapshot.docs) {
                 const requestData = document.data();
                 const createdBy = requestData.createdBy;
-
+                console.log(requestData)
                 // Retrieve additional data from 'users' collection
                 const userRef = doc(firestoreDB, 'users', createdBy);
                 const userSnapshot = await getDoc(userRef);
@@ -94,16 +160,51 @@ const FindScheduledHost = () => {
                     const driverInfoSnapshot = await getDoc(driverInfoRef);
                     requestData.driverInfo = driverInfoSnapshot.exists() ? driverInfoSnapshot.data() : {};
                 }
-
+               
                 requestsData.push({
                     id: document.id,
                     ...requestData,
                 });
+                console.log('adding....')
+                console.log(requestData.vehicleType)
+                console.log(myReqData?.vehicleType)
             }
+            console.log(requestsData)
+            const filteredRequests = requestsData.filter(request => request.driverInfo.type == myReqData?.vehicleType && isCompatible(request, myReqData) != 0);
+            console.log('filtered', filteredRequests)
+            const sorted = filteredRequests.sort((a, b) => {
+                var matches_a = isCompatible(a, myReqData)
+                var matches_b = isCompatible(a, myReqData)
+                if (matches_a === matches_b) {
+                    if (a.seats === b.seats) {
+                        return a.fare - b.fare; // Sort by fare in ascending order if seats are the same
+                    }
+                    return b.seats - a.seats; // Sort by seats in descending order
+                }
+                return matches_b - matches_a;
+            });
+            setRequests(sorted)
+            setFilteredRequests(sorted)
+            const singleMatches = []
 
-            setRequests(requestsData);
-            setFilteredRequests(requestsData);
-            applyFilters()
+            console.log('sorted', sorted)
+            for (const requestData of sorted) {
+                console.log('hiii', requestData)
+                if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude && requestData?.routeTime) {
+                    const result = await chechkWayPoints(requestData.from?.latitude, requestData.to?.latitude, requestData.from?.longitude, requestData.to?.longitude, requestData.routeTime)
+                    console.log('threshhh', result)
+                    if (Math.round(result) < 50) {
+                        singleMatches.push(requestData)
+                        console.log('adding', singleMatches)
+                    }
+                }
+            }
+            // const consolidatedMatches = findConsolidatedMatches(requestsData, myReqData);
+
+            //  setCompatibleRequests(singleMatches);
+            //  setConsolidatedRequests(consolidatedMatches);
+            setRequests(singleMatches);
+            setFilteredRequests(singleMatches);
             setIsLoading(false)
         };
 
@@ -113,6 +214,104 @@ const FindScheduledHost = () => {
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests]);
+    const parseTimeStringToDateTime = (timeString) => {
+        const [hours, minutes] = timeString.split(':'); // Split time string into hours and minutes
+        const currentDate = new Date(); // Get current date
+        currentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0); // Set time to current date
+        return currentDate;
+    };
+    const isCompatible = (request, myReq) => {
+        const reqStartDate = new Date(request.startDate);
+        const reqEndDate = new Date(request.endDate);
+        const myStartDate = myReq.startDate;
+        const myEndDate = myReq.endDate;
+
+        if (myStartDate > reqEndDate || myEndDate < reqStartDate) {
+            console.log('dates not match')
+            return 0;
+        }
+        if (!request.roundTrip && myReq.roundTrip) {
+            console.log('round trip issue', myReq.roundTrip, request.roundTrip)
+            return 0;
+        }
+
+        const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const requiredDays = daysOfWeek.filter(day => myReq.schedule[day] != null);
+        var match = 0;
+        for (let day of requiredDays) {
+            if (request.schedule[day] && myReq.schedule[day]) {
+                const reqSchedule = myReq.schedule[day];
+                const mySchedule = request.schedule[day];
+                if (reqSchedule && mySchedule) {
+                    console.log(reqSchedule)
+                    if (parseTimeStringToDateTime(reqSchedule.Other).getTime() >= parseTimeStringToDateTime(mySchedule.Earliest).getTime() + request.routeTime &&
+                        parseTimeStringToDateTime(reqSchedule.Earliest).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule.Other).getTime()) {
+                        console.log('halfway', request.id,myReq.schedule[day], request.schedule[day])
+                            if (request.roundTrip && myReq.roundTrip) {
+                            if (parseTimeStringToDateTime(reqSchedule.Return).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule['Return Dropoff']).getTime() &&
+                                parseTimeStringToDateTime(reqSchedule['Return Dropoff']).getTime() >= parseTimeStringToDateTime(mySchedule.Return).getTime() + request.routeTime) {
+                                match += 1;
+                            } else {
+                                match += 0.5;
+                            }
+                        } else if (!myReq.roundTrip) {
+                            match += 1
+                        }
+                    }
+                }
+            }
+        }
+        console.log('matched',match)
+        return match;
+    };
+
+
+    const findConsolidatedMatches = (allRequests, myReq) => {
+        const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+        const requiredDays = daysOfWeek.filter(day => myReq.schedule[day].enabled);
+
+        const getMatchingRequestsForDay = (day) => {
+            return allRequests.filter(request =>
+                request.schedule[day]?.enabled &&
+                request.schedule[day].Earliest === myReq.schedule[day].Earliest &&
+                request.schedule[day].Other === myReq.schedule[day].Other &&
+                request.schedule[day].Return === myReq.schedule[day].Return &&
+                request.schedule[day].ReturnDropoff === myReq.schedule[day].ReturnDropoff
+            );
+        };
+
+        const findCombinations = (days, currentCombo = [], remainingDays = requiredDays) => {
+            if (remainingDays.length === 0) {
+                return [currentCombo];
+            }
+
+            const nextDay = remainingDays[0];
+            const matchingRequests = getMatchingRequestsForDay(nextDay);
+            let combinations = [];
+
+            matchingRequests.forEach(request => {
+                const newCombo = [...currentCombo, request];
+                const newRemainingDays = remainingDays.slice(1);
+                const newCombinations = findCombinations(days, newCombo, newRemainingDays);
+                combinations = [...combinations, ...newCombinations];
+            });
+
+            return combinations;
+        };
+
+        const consolidated = findCombinations(requiredDays);
+
+        // Filter out combinations that do not cover all required days
+        const validConsolidated = consolidated.filter(combo => {
+            const coveredDays = combo.map(request => {
+                return Object.keys(request.schedule).filter(day => request.schedule[day].enabled);
+            }).flat();
+
+            return requiredDays.every(day => coveredDays.includes(day));
+        });
+
+        return validConsolidated;
+    };
 
     const applyFilters = () => {
         const filtered = requests.filter(request => {
@@ -124,7 +323,7 @@ const FindScheduledHost = () => {
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
                 !declinedRequests.includes(request.id) &&
-                request.createdBy !=currentUser._id
+                request.createdBy != currentUser._id
             );
         });
         setFilteredRequests(filtered);
@@ -142,7 +341,7 @@ const FindScheduledHost = () => {
         <View style={styles.card}>
             <View style={styles.profileSection}>
 
-                <View style={{ flexDirection: 'row',alignItems: 'center'}}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     {item.userData?.profilePic ? (<Avatar rounded size={75} source={{ uri: item.userData?.profilePic }} />)
                         : (
                             <Avatar rounded size={75} source={require('../assets/avatar.jpg')}
@@ -160,13 +359,13 @@ const FindScheduledHost = () => {
 
                 </View>
 
-                <View style={{ paddingRight: 7, backgroundColor: 'white', marginLeft:'auto' }}>
+                <View style={{ paddingRight: 7, backgroundColor: 'white', marginLeft: 'auto' }}>
                     <View style={{ marginLeft: 'auto' }}>
                         <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
-                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>
+
                         <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
                             <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
-                                Coriders
+                                Coriders:  {item.coriders?.length}
                             </Text>
                         </TouchableOpacity>
                         <CoriderModal
@@ -177,21 +376,21 @@ const FindScheduledHost = () => {
 
                     </View>
                     <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                        <Text style={{ fontStyle: 'italic', fontSize: 12, marginBottom: -5  }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
-                        <Text style={{ fontWeight: 'bold', fontSize: 12,marginBottom: -5  }}> to </Text>
+                        <Text style={{ fontStyle: 'italic', fontSize: 12, marginBottom: -5 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
+                        <Text style={{ fontWeight: 'bold', fontSize: 12, marginBottom: -5 }}> to </Text>
                         <Text style={{ fontStyle: 'italic', fontSize: 12 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
                     </View>
                 </View>
             </View>
             <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
-
+            <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, paddingHorizontal: 10, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
             <View style={{ flexDirection: 'row' }}>
                 <View style={{ flexDirection: 'row', paddingHorizontal: 5, paddingVertical: 3 }}>
                     <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
                     <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
                 </View>
 
-                <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2 , paddingRight:7}}>
+                <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }}>
                     {daysOfWeek.map((day, index) => (
                         <TouchableOpacity key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
                             <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
@@ -242,6 +441,14 @@ const FindScheduledHost = () => {
                         // Status changed to accepted, navigate to "during ride" screen
                         navigation.navigate('DuringRide', { requestId: selectedRequestId });
                     }
+                    if (myReqResponse && myReqResponse.status === 'rejected') {
+                        setShowAcceptModal(false)
+                        Alert.alert(
+                            'Request Rejected',
+                            'Rider has rejected your request. Find other riders...',
+                            [{ text: 'OK' }]
+                        );
+                    }
                 }
             });
 
@@ -250,7 +457,7 @@ const FindScheduledHost = () => {
     }, [selectedRequestId]);
     const handleAcceptance = async (reqID) => {
         setSelectedRequestId(reqID)
-        
+
         // Add or update response in Firestore
 
         try {
@@ -264,18 +471,18 @@ const FindScheduledHost = () => {
                 const responseIndex = docSnapshot.data().responses.findIndex(response => response.responseBy === currentUser?._id);
                 console.log(responseIndex)
                 if (responseIndex == -1) {
-                // Document already exists, update it
-                await updateDoc(responseRef, {
-                    responses: [...docSnapshot.data().responses, response]
-                });
-            }else{
-                const existingData=docSnapshot.data()
-                existingData.responses[responseIndex]=response
-                console.log('d',existingData)
-                await updateDoc(responseRef, 
-                   {responses: existingData.responses}
-                );
-            }
+                    // Document already exists, update it
+                    await updateDoc(responseRef, {
+                        responses: [...docSnapshot.data().responses, response]
+                    });
+                } else {
+                    const existingData = docSnapshot.data()
+                    existingData.responses[responseIndex] = response
+                    console.log('d', existingData)
+                    await updateDoc(responseRef,
+                        { responses: existingData.responses }
+                    );
+                }
             } else {
                 // Document doesn't exist, create it with the accepted request ID
                 await setDoc(responseRef, {
@@ -327,12 +534,15 @@ const FindScheduledHost = () => {
 
             </View>
             {isLoading && (
-          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
-        )}
+                <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+            )}
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
                 key={item => item.id}
+                ListEmptyComponent={() => {
+                    return isLoading ? null : <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}><Text style={{ color: 'black' }}>No Request found!</Text></View>
+                }}
             />
             <Modal
                 visible={showAcceptModal}

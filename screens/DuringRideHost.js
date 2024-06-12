@@ -39,7 +39,8 @@ const DuringRideHost = () => {
     latitudeDelta: 0.0102,
     longitudeDelta: 0.0101,
   };
-  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
+  //{ _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //
   const isLoading = useSelector(state => state.ride.isLoading);
   const rideDetails = useSelector(state => state.ride.rideDetails);
   const distance = useSelector(state => state.ride.distance);
@@ -54,7 +55,8 @@ const DuringRideHost = () => {
   const showDirection = useSelector(state => state.ride.showDirections);
   const minutesPassed = useSelector(state => state.ride.minutesPassed);
   const navigation = useNavigation();
-  const rideID = 'Ri5o1r474TkoTNC0XUZ6';//useRoute.params?.requestId;
+  const rideID = useRoute().params?.requestId;
+  //'Ri5o1r474TkoTNC0XUZ6';//
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
   const YOUR_TASK_NAME = 'host-background-location-task';
@@ -69,22 +71,6 @@ const DuringRideHost = () => {
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const [targetTime, setTargetTime] = useState(null);
 
-  useEffect(() => {
-    registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
-
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      setNotification(notification);
-    });
-
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log(response);
-    });
-
-    return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
-    };
-  }, []);
   const stopLocationUpdates = async () => {
 
     const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(YOUR_TASK_NAME);
@@ -319,12 +305,20 @@ const DuringRideHost = () => {
   };
 
   useEffect(() => {
+    stopLocationUpdates();
+    registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
+
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      setNotification(notification);
+    });
+
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log(response);
+    });
     // Call the function to start receiving location updates
     startLocationUpdates();
-  }, []);
-  useEffect(() => {
     const fetchData = async () => {
-      dispatch(setLoading(true));
+      console.log('During ride host!', rideID)
       try {
         const rideDocRef = doc(collection(firestoreDB, 'ride'), rideID);
         const unsubscribe = onSnapshot(rideDocRef, async (rideSnapshot) => {
@@ -532,7 +526,7 @@ const DuringRideHost = () => {
   };
 
   const handleMapReady = () => {
-    setIsMapReady(false);
+    setIsMapReady(true);
   };
 
   const showDirections = () => {
@@ -597,7 +591,7 @@ const DuringRideHost = () => {
     const currentTime = new Date();
 
     // Set the target time 5 minutes from the current time
-    const targetTime = new Date(currentTime.getTime() + 0.5 * 60000); // Adding 5 minutes in milliseconds
+    const targetTime = new Date(currentTime.getTime() + 5 * 60000); // Adding 5 minutes in milliseconds
     setTargetTime(targetTime)
   }
 

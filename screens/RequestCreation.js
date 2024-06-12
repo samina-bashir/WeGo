@@ -70,8 +70,8 @@ const RequestCreationScreen = () => {
     );
     const mapRef = useRef(null);
     const [schedule, setSchedule] = useState(null);
-    const currentUser = {_id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //useSelector((state) => state?.user?.user);
-   
+    const currentUser =  useSelector((state) => state?.user?.user);
+   //{_id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' }
     useEffect(() => {
         (async () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
@@ -168,7 +168,7 @@ const RequestCreationScreen = () => {
                     if (seats>1){
                     fareEstimate *= (seats*0.60);
                     }
-    
+                    setFare(null)
                     setEstimatedFare(fareEstimate);
                 }
             } catch (error) {
@@ -356,18 +356,23 @@ const RequestCreationScreen = () => {
             ac: ac,
             timestamp: Timestamp.now(),
             routeTime,
-            routeDistance
+            routeDistance,
+            currently: 'active'
         };
         if (!hasVehicle) {
             requestData.vehicleType = selectedVehicle;
+        }else{
+            requestData.vehicleType = userVehicleType;
         }
         try {
             var collectionName = hasVehicle ? 'findRiderRequests' : 'findHostRequests';
             if (schedule) {
                 collectionName = hasVehicle ? 'findScheduledRiderRequests' : 'findScheduledHostRequests';
                 requestData.schedule = schedule;
+                console.log('types', typeof(startDate))
                 requestData.startDate = startDate;
                 requestData.endDate = endDate;
+                requestData.roundTrip = roundTrip;
             }
             const docRef = await addDoc(collection(firestoreDB, collectionName), requestData);
             console.log('Request added with ID: ', docRef.id);
@@ -405,6 +410,7 @@ const RequestCreationScreen = () => {
         setRoundTrip(roundTrip);
         setRawSchedule(receivedSchedule);
         setSchedule(filteredSchedule);
+        console.log('typeof',typeof(receivedStartDate))
         setStartDate(receivedStartDate);
         setEndDate(receivedEndDate);
         setShowSchedule(false);
@@ -559,7 +565,7 @@ const RequestCreationScreen = () => {
                         <View style={styles.inputContainer}>
                             <Icon name="money-bill-wave" type="font-awesome-5" color={GlobalColors.primary} />
                             <Input
-                                placeholder={estimatedFare !== null ? `Offer your Fare (PKR ${estimatedFare.toFixed(0)})` : 'Offer your Fare'} 
+                                placeholder={estimatedFare !== null ? `Offer your Fare per Ride (Rs.${estimatedFare.toFixed(0)})` : 'Offer your Fare Per Ride'} 
                                 inputContainerStyle={{ borderBottomWidth: 0 }}
                                 containerStyle={{ flex: 1, height: 50, paddingTop: 5 }}
                                 inputStyle={styles.input}

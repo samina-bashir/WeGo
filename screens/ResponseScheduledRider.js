@@ -1,26 +1,24 @@
+//in project
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking } from 'react-native';
 import { setDoc, doc, collection, getDoc, addDoc, where, getDocs, runTransaction, updateDoc, query, FieldValue } from 'firebase/firestore'; // Make sure these imports are correct
 import { firestoreDB } from '../config/firebase.config'; // Check if firestoreDB is properly imported
-import { Avatar, Icon, Input } from 'react-native-elements';
+import { Avatar, Icon, Input, ActivityIndicator } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
-import { ActivityIndicator } from 'react-native';
-
 import { useNavigation } from '@react-navigation/native';
 import { Modal } from 'react-native';
 import Picker from '../components/Picker';
 import CoriderModal from '../components/CoridersModal';
 
 
-const ResponseRider = ({ route }) => {
+const ResponseScheduledRider = ({ route }) => {
+    const { ReqId, riderId } = route.params;
 
-    const { ReqId } = route.params;  //HOST REQ ID FINDrIDERREQ DOC ID //RIDER REQ ID ITEM.REQUESTiD
-
-
+    console.log('in parameter req id is : ', ReqId);
     const hostReqId = ReqId;
-    let updatedfare = null;
+    var updatedfare = null;
 
- 
+    console.log('in parameter HostReqId  id of host is : ', hostReqId);
     const userId = 'FZxbp2UoJxThVSBIjIIbGEA3Z202';
 
     const [responsesdata, setResponses] = useState([]);
@@ -28,37 +26,36 @@ const ResponseRider = ({ route }) => {
     const [coridersVisible, setCoridersVisible] = useState(false);
     const [selectedItem, setItem] = useState(null);
     const [declinedRequests, setDeclinedRequests] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [isContainerVisible, setContainerVisible] = useState(true);
     const [noPendingResponses, setNoPendingResponses] = useState(false);
-    
+    const [loading, setLoading] = useState(true);
+
 
     useEffect(() => {
         const fetchResponses = async () => {
             try {
-                const q = doc(collection(firestoreDB, 'responses'), ReqId);
+                const q = doc(collection(firestoreDB, 'responsesScheduledRider'), ReqId);//ReqId is host id
                 const querySnapshot = await getDoc(q);
 
                 if (!querySnapshot.exists()) {
-                    setLoading('false')
                     console.log('No matching document found for responses');
-                    console.log("faslie")
                     setNoPendingResponses(true);
                     setResponses([]);
                     return;
                 }
 
-                const response_ = querySnapshot.data().responses;
-                console.log(response_)
+                const response_ = querySnapshot.data().responsesScheduledRider;
                 if (response_) {
-                    console.log(response_)
                     const pendingResponses = response_.filter(res => res.status === 'pending');
                     setResponses(pendingResponses);
 
+                    
                     if (pendingResponses.length === 0) {
                         setNoPendingResponses(true);
                         setLoading(false);
-                        console.log('no response')
+
                     }
+
                     else{
                         const updatedResponsesData = [];
                         for (const res of response_) {
@@ -79,42 +76,80 @@ const ResponseRider = ({ route }) => {
                                 responseBy:res.responseBy,
                                 userData: userData,
                                 coriders: coR,
-                                // currently:res.currently,
                                 seats:res.seats,
-                                timestamp:res.timestamp
-        
                             });
                         }
-                           setResponses(updatedResponsesData);
-                    setLoading(false);
+        
+                        setResponses(updatedResponsesData);
+                        setLoading(false);
+
 
                     }
-                 
-
-                } else {
+                } 
+                else {
                     console.log('responses array not found in the document');
                     setResponses([]);
-                    setLoading(false)
-                    setNoPendingResponses(true);
                 }
 
-               
+           
             } catch (error) {
                 console.error('Error fetching responses:', error);
             }
-            // finally{
-            //     setLoading(false);
-            // }
         };
-    
 
         fetchResponses();
-    }, [ReqId]);
+    }, []);
 
-    useEffect(()=>{
-        console.log('l',loading)
-        console.log('np',noPendingResponses)
-    },[loading, noPendingResponses])
+
+    const AddToRider = async (item) => {
+        try{
+        const rideRef = doc(firestoreDB, "ride", item.requestId);
+        await runTransaction(firestoreDB, async (transaction) => {
+          const docSnapshot = await transaction.get(rideRef);
+          if (docSnapshot.exists) {
+            let previousRiders = docSnapshot.data()?.Riders
+            let isPresent= false
+            if(previousRiders){
+                previousRiders.forEach(element => {
+                    if(element.rider == riderId)
+                    isPresent = true
+                });
+                console.log('first if ')
+            }
+            if(!isPresent){
+            const newRideData = {
+              fare: item.fare,
+              from: item.from,
+              to: item.to,
+              paid: false,
+              rider: item.responseBy,
+              status: item.status,
+            };
+            try{
+                await updateDoc(docSnapshot.ref, {
+                    Riders:previousRiders ? [ ...previousRiders, newRideData] : [newRideData],
+                  }).catch((error)=>{
+                    if(error.toString().includes('not-found')){
+                         setDoc(doc(firestoreDB, "ride", item.requestId),  {
+                            Host:riderId,
+                            Riders: [newRideData],
+                          })
+                    }
+                  })
+                  console.log('added by add to rider')
+            }catch(error){
+                console.log(error)
+                alert("Failed : "+ error)
+            }
+        }
+          }
+        });
+        }catch (error){
+            alert("Failed: "+ error)
+        }
+      };
+   
+
 
     async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFare, responseBy) {
         const rideRef = doc(collection(firestoreDB, 'ride'), hostReqId);
@@ -132,25 +167,11 @@ const ResponseRider = ({ route }) => {
             }];
 
             await updateDoc(rideRef, { Riders: updatedRiders });
-            console.log('ride added')
+            console.log('ride added by updaterideinfo')
         } else {
-            
-            const findRiderReqDoc = await getDoc(doc(collection(firestoreDB, 'findRiderRequests'), hostReqId));
+            const findRiderReqDoc = await getDoc(doc(collection(firestoreDB, 'findScheduledRiderRequests'), hostReqId));
             if (findRiderReqDoc.exists()) {
                 const data = findRiderReqDoc.data();
-                console.log({
-                    from: data.from,
-                    to: data.to,
-                    Host: data.createdBy,
-                    Riders: [{
-                        from: itemfrom,
-                        to: itemto,
-                        status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
-                        fare: updatedFare,
-                        paid: false,
-                        rider: responseBy
-                    }]
-                })
                 await setDoc(rideRef, {
                     from: data.from,
                     to: data.to,
@@ -164,9 +185,9 @@ const ResponseRider = ({ route }) => {
                         rider: responseBy
                     }]
                 });
-                console.log('done')
+                console.log('done by updaterideinfo')
             } else {
-                console.log(`No document found with id ${hostReqId} in findRiderRequests collection.`);
+                console.log(`No document found with id ${hostReqId} in findScheduledRiderRequests collection.`);
             }
         }
     }
@@ -176,7 +197,7 @@ const ResponseRider = ({ route }) => {
     const updatefare = async (item) => { //item.fare is riderfare
         try {
             // Assuming firestoreDB is your Firestore database instance
-            const findRiderRequestRef = doc(collection(firestoreDB, 'findRiderRequests'), hostReqId);
+            const findRiderRequestRef = doc(collection(firestoreDB, 'findScheduledRiderRequests'), hostReqId);
             const findRiderRequestDoc = await getDoc(findRiderRequestRef);
 
             if (findRiderRequestDoc.exists()) {
@@ -189,7 +210,6 @@ const ResponseRider = ({ route }) => {
 
                 //update seats 
                 console.log('item.seats ',item.seats)
-                console.log('item ')
                 var updated_seats;
                 updated_seats=host_seats-item.seats;
 
@@ -220,7 +240,7 @@ const ResponseRider = ({ route }) => {
                 
                 
 
-                const findRiderRequestRef = doc(collection(firestoreDB, 'findRiderRequests'), ReqId);
+                const findRiderRequestRef = doc(collection(firestoreDB, 'findScheduledRiderRequests'), ReqId);
                 await runTransaction(firestoreDB, async (transaction) => {
                     const findRiderRequestDoc = await transaction.get(findRiderRequestRef);
                     if (findRiderRequestDoc.exists()) {
@@ -229,8 +249,6 @@ const ResponseRider = ({ route }) => {
                         const updateData = { fare: hostFare, seats: updated_seats };
                         if (updated_seats < 1) {
                             updateData.currently = 'closed';
-                            updateData.seats = 0;
-
                         }
                         // Perform the update
                         transaction.update(findRiderRequestRef, updateData);
@@ -245,7 +263,10 @@ const ResponseRider = ({ route }) => {
                 console.log('fare is ', fare )
                 console.log('host fare is ', hostFare )
 
-                return Math.floor(fare);
+                var int_fare;
+                int_fare=Math.floor(fare)
+                return int_fare
+
             } else {
                 console.log('Host request document does not exist.');
                 return null; // or any default value indicating failure
@@ -258,29 +279,21 @@ const ResponseRider = ({ route }) => {
 
 
     const onPressAccept = async (item) => {
+    
         try {
-            console.log('In onPressAccept?')
-            console.log('at start itemmm ',item)
-
-            const requestRef = doc(firestoreDB, 'responses', ReqId);//Reqid is Host's Reqid in responses docid=Hostsid=FindRiderReq doc id
+            const requestRef = doc(firestoreDB, 'responsesScheduledRider', ReqId);
             await runTransaction(firestoreDB, async (transaction) => {
                 const docSnapshot = await transaction.get(requestRef);
                 if (docSnapshot.exists) {
-                    const responses = docSnapshot.data().responses;
-                    const index = responses.findIndex((response) => response.requestId === item.requestId);
+                    const responsesScheduledRider = docSnapshot.data().responsesScheduledRider;
+                    const index = responsesScheduledRider.findIndex((response) => response.requestId === item.requestId);
                     if (index !== -1) {
-                        responses[index].status = 'confirmed';
-
-                        transaction.update(requestRef, { responses });
-                        // console.log('Response status updated successfully!');
-                        // console.log('item fare ', item.fare)
-                        console.log('item seats ', item.seats)
+                        responsesScheduledRider[index].status = 'confirmed';
+                        transaction.update(requestRef, { responsesScheduledRider });
+                        console.log('Response status updated successfully!');
 
                         updatedfare = await updatefare(item);
                         console.log('Result of updatefare:', updatedfare);
-
-                        console.log('responseBy ',item.responseBy)
-                        console.log('item  ',item)
 
                         updateRideInfo(
                             hostReqId,
@@ -288,13 +301,10 @@ const ResponseRider = ({ route }) => {
                             item.to,
                             item.status,
                             updatedfare, //actually updatedfare swnd krna h
-                            item.responseBy,
-                            
-                        
+                            item.responseBy
                         )
-
-                        navigation.navigate('DuringRideHost', { requestId: hostReqId})
-
+                        // AddToRider(item)
+                        // navigation.navigate('DuringRideHost', {requestId: ReqId})
                     } else {
                         console.log('Response not found in the array.');
                     }
@@ -305,41 +315,42 @@ const ResponseRider = ({ route }) => {
         } catch (error) {
             console.error('Error updating response status:', error);
         }
+      };
 
 
 
-    };
+    // const onPressDecline = async (item) => {
+    //     try {
+            
+    //         const requestRef = doc(firestoreDB, 'responsesScheduledRider', ReqId);
+    //         await runTransaction(firestoreDB, async (transaction) => {
+    //             const docSnapshot = await transaction.get(requestRef);
+    //             if (docSnapshot.exists) {
+    //                 const responsesHost = docSnapshot.data().responsesHost;
+    //                 console.log('findRiderReqId is ', item.requestId)
+    //                 const index = responsesHost.findIndex((response) => response.requestId === item.requestId);
+    //                 if (index !== -1) {
+    //                     responsesHost[index].status = 'rejected';
+    //                     transaction.update(requestRef, { responsesHost });
+    //                     console.log('Response status updated successfully!');
+
+    //                     setDeclinedRequests(prevRides => prevRides.filter(ride => ride.requestId !== item.requestId));
 
 
-    const onPressDecline = async (item) => {
-        try {
-            const requestRef = doc(firestoreDB, 'responsesHost', ReqId);
-            await runTransaction(firestoreDB, async (transaction) => {
-                const docSnapshot = await transaction.get(requestRef);
-                if (docSnapshot.exists) {
-                    const responsesHost = docSnapshot.data().responsesHost;
-                    console.log('findRiderReqId is ', item.findRiderReqId)
-                    const index = responsesHost.findIndex((response) => response.findRiderReqId === item.findRiderReqId);
-                    if (index !== -1) {
-                        responsesHost[index].status = 'rejected';
-                        transaction.update(requestRef, { responsesHost });
-                        console.log('Response status updated successfully!');
-
-                        setDeclinedRequests(prevRides => prevRides.filter(ride => ride.findRiderReqId !== item.findRiderReqId));
-
-
-                    } else {
-                        console.log('Response not found in the array.');
-                    }
-                } else {
-                    console.log('Document does not exist.');
-                }
-            });
-        } catch (error) {
-            console.error('Error updating response status:', error);
-        }
-    };
-
+    //                 } else {
+    //                     console.log('Response not found in the array.');
+    //                 }
+    //             } else {
+    //                 console.log('Document does not exist.');
+    //             }
+    //         });
+    //     } catch (error) {
+    //         console.error('Error updating response status:', error);
+    //     }
+    // };
+    const onPressDecline = () => {
+    setContainerVisible(false);
+    }
 
 
 
@@ -391,11 +402,11 @@ const ResponseRider = ({ route }) => {
             <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> From: {item.from.name} </Text>
+                    <Text style={styles.text}> From: {item.from} </Text>
                 </View>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> To: {item.to.name} </Text>
+                    <Text style={styles.text}> To: {item.to} </Text>
                 </View>
             </View>
             <View style={{ flexDirection: 'row' }}>
@@ -410,7 +421,7 @@ const ResponseRider = ({ route }) => {
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]}
                     onPress={() => {
-                        onPressDecline(item)
+                        onPressDecline()
                         setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
                     }}>
 
@@ -420,28 +431,20 @@ const ResponseRider = ({ route }) => {
         </View>
     );
     return (
-        // <View style={styles.container}>
-        //     <Text style={styles.heading}>Riders' Responses</Text>
-        //     <FlatList
-        //         data={responsesdata}
-        //         renderItem={renderRequestItem}
-        //         keyExtractor={item => item.id}
-        //     />
-        // </View>
         <View style={styles.container}>
-        <Text style={styles.heading}>Riders' Responses</Text>
-        {loading ? (
+            <Text style={styles.heading}>Riders' Responses</Text>
+            {loading ? (
             
             <ActivityIndicator size="large" color="#0c2442" marginTop='120' />
         ) : noPendingResponses ? (
                 <Text style={styles.noResponsesText}>No responses for now</Text>
             ) : (
-                <FlatList
-                    data={responsesdata}
-                    renderItem={renderRequestItem}
-                    keyExtractor={item => item.requestId}
-                />
-            )}
+            <FlatList
+                data={responsesdata}
+                renderItem={renderRequestItem}
+                keyExtractor={item => item.id}
+            />
+       )}
         </View>
     );
 };
@@ -493,7 +496,7 @@ const styles = StyleSheet.create({
     },
     text: {
         fontSize: 15,
-        // fontWeight: 'bold',
+        fontWeight: 'bold',
         marginLeft: 8,
     },
     textMini: {
@@ -518,16 +521,16 @@ const styles = StyleSheet.create({
         marginHorizontal: 5,
         fontStyle: 'italic'
     },
-    noResponsesText:{
-        color:GlobalColors.secondary,
+        noResponsesText:{
+        color:GlobalColors.primary,
         justifyContent:'center',
         alignItems:'center',
         fontWeight:'bold',
-        margin:'15%',
-        marginTop:'60%',
-        fontSize:25,
+        margin:120,
+        marginTop:350,
+        fontSize:15,
 
     }
 });
 
-export default ResponseRider;
+export default ResponseScheduledRider;

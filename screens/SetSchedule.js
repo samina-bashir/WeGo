@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Dimensions } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Icon } from 'react-native-elements';
@@ -14,14 +14,17 @@ const SetSchedule = ({ roundTripProp, scheduleProp, startDateProp, endDateProp, 
     const [endDate, setEndDate] = useState(endDateProp);
     const [selectedButton, setSelectedButton] = useState(null);
     const [roundTrip, setRoundTrip] = useState(roundTripProp);
-    const [schedule, setSchedule] = useState(scheduleProp); 
+    const [schedule, setSchedule] = useState(scheduleProp);
     const [selectedDay, setSelectedDay] = useState(null);
 
     const handleShowDatePicker = (buttonType) => {
         setSelectedButton(buttonType);
+        console.log('hi')
         setShowDatePicker(true);
     };
-
+    useEffect(() => {
+        console.log('show date picker', showDatePicker)
+    }, [showDatePicker])
     const handleDateChange = (event, date) => {
         setShowDatePicker(false);
         if (event.type == 'set' && date) {
@@ -132,7 +135,7 @@ const SetSchedule = ({ roundTripProp, scheduleProp, startDateProp, endDateProp, 
     };
 
     const handleSetSchedule = () => {
-        if(!startDate || !endDate){
+        if (!startDate || !endDate) {
             Alert.alert(
                 'Required Fields',
                 `Please select a start date and end date for your request.`
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 12,
         paddingTop: 20,
-        zIndex:190,
+        zIndex: 190,
         height: windowHeight,
         backgroundColor: GlobalColors.background
     },

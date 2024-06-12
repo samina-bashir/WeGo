@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking, ActivityIndicator } from 'react-native';
-import { collection, query, where, doc, getDocs, getDoc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, onSnapshot, updateDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { Avatar, Icon, Input, Switch } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
@@ -10,7 +10,7 @@ import Picker from '../components/Picker';
 import { useSelector } from 'react-redux';
 
 const FindScheduledRider = () => {
-    const [isLoading, setIsLoading]= useState(true)
+    const [isLoading, setIsLoading] = useState(true)
     const [requests, setRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
     const navigation = useNavigation();
@@ -38,7 +38,8 @@ const FindScheduledRider = () => {
         schedule: myReqData?.schedule,
         startDate: new Date(myReqData?.startDate),
         endDate: new Date(myReqData?.endDate),
-        seats: myReqData?.seats
+        seats: myReqData?.seats,
+        roundTrip: myReqData?.roundTrip
     };
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -48,13 +49,19 @@ const FindScheduledRider = () => {
         const fetchRequests = async () => {
             setIsLoading(true)
             const requestsCollection = collection(firestoreDB, 'findScheduledHostRequests');
-            const q = query(requestsCollection);
+            const q = query(requestsCollection, where('createdBy', '!=', currentUser?._id), where('endDate', '>=', Timestamp.fromDate(new Date(myReqData.startDate))), where('currently', '==', 'active'));
 
             const querySnapshot = await getDocs(q);
             const requestsData = [];
+            if (querySnapshot?.docs.length == 0) {
+                setIsLoading(false)
+                console.log('no match found')
+            }
+
 
             for (const document of querySnapshot.docs) {
                 const requestData = document.data();
+                console.log(requestData)
                 const createdBy = requestData.createdBy;
 
                 // Retrieve additional data from 'users' collection
@@ -63,7 +70,7 @@ const FindScheduledRider = () => {
                 requestData.userData = userSnapshot.exists() ? userSnapshot.data() : {};
                 const email = requestData.userData.email;
                 const domain = email.substring(email.lastIndexOf("@") + 1);
-                
+
                 // Create Firestore document reference
                 const orgRef = doc(firestoreDB, 'organizations', domain);
                 // Get the document
@@ -88,21 +95,123 @@ const FindScheduledRider = () => {
                     ...requestData,
                 });
             }
+            console.log('requests', requestsData)
+            const filteredRequests = requestsData.filter(request =>  isCompatible(request, myReqData) != 0);
+            const sorted = filteredRequests.sort((a, b) => {
+                var matches_a = isCompatible(a, myReqData)
+                var matches_b = isCompatible(a, myReqData)
+                if (matches_a === matches_b) {
+                    if (a.seats === b.seats) {
+                        return b.fare - a.fare; // Sort by fare in desc order if seats are the same
+                    }
+                    return b.seats - a.seats; // Sort by seats in descending order
+                }
+                return matches_b - matches_a;
+            });
+            setRequests(sorted)
+            setFilteredRequests(sorted)
+            const singleMatches = []
+            console.log('sorted requests', sorted)
+            for (const requestData of sorted) {
+                console.log('hiii', requestData)
+                if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude && requestData?.routeTime) {
+                    var result = await chechkWayPoints(requestData.from?.latitude, requestData.to?.latitude, requestData.from?.longitude, requestData.to?.longitude, requestData.routeTime)
+                    console.log('threshhh', result[0],'ok', result[1])
+                    if (Math.round(result[0]) < 40 || Math.round(result[1]) < 20) {
+                        singleMatches.push(requestData)
+                        console.log('adding', singleMatches)
+                    }
+                }
+            }
+            //  const consolidatedMatches = findConsolidatedMatches(filteredRequests, myReqData);
 
-            setRequests(requestsData);
-            setFilteredRequests(requestsData);
-            console.log(requestsData)
-            applyFilters();
+            setRequests(singleMatches);
+            setFilteredRequests(singleMatches);
+            console.log(singleMatches)
             setIsLoading(false)
         };
 
         fetchRequests();
     }, []);
+    const parseTimeStringToDateTime = (timeString) => {
+        if(!timeString){
+            console.log('time not found')
+            return new Date().setHours(0);
+        }
+        const [hours, minutes] = timeString?.split(':'); // Split time string into hours and minutes
+        const currentDate = new Date(); // Get current date
+        currentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0); // Set time to current date
+        return currentDate;
+    };
+    const chechkWayPoints = async (fromLat, toLat, fromLong, toLong) => {
+        try {
+            const myHeaders = new Headers();
+            myHeaders.append("Content-Type", "application/json");
+            myHeaders.append(
+                "X-Goog-Api-Key",
+                "AIzaSyDdZWM3zDQP-5iY5iinSE9GU858bjFoNf8"
+            );
+            myHeaders.append(
+                "X-Goog-FieldMask",
+                "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
+            );
 
+            const raw = JSON.stringify({
+                origin: { location: { latLng: { latitude: myReqData?.from.latitude, longitude: myReqData?.from.longitude } } },
+                destination: { location: { latLng: { latitude: myReqData?.to.latitude, longitude: myReqData?.to.longitude } } },
+                travelMode: "DRIVE",
+                routingPreference: "TRAFFIC_AWARE",
+                computeAlternativeRoutes: false,
+                languageCode: "en-US",
+                units: "IMPERIAL",
+                intermediates: [
+                    { location: { latLng: { latitude: fromLat, longitude: fromLong } } },
+                    { location: { latLng: { latitude: toLat, longitude: toLong } } }
+                ]
+            });
+            const requestOptions = {
+                method: "POST",
+                headers: myHeaders,
+                body: raw,
+                redirect: "follow",
+            };
+
+            const APIresponse = await fetch(
+                "https://routes.googleapis.com/directions/v2:computeRoutes",
+                requestOptions
+            )
+
+            const result = await APIresponse.json()
+
+            if (result.routes && result.routes.length > 0) {
+                // alert(parseInt(myReqData?.routeTime) +" : "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]))
+                console.log(result);
+                console.log(myReqData?.routeTime);
+                console.log(myReqData?.routeDistance);
+                let threshHold = 99999999
+                let extraTime = 0
+                console.log(parseInt(result?.routes[0]?.duration?.split('s')[0]))
+                extraTime = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime)
+                threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
+                // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
+                // alert(" th "+Math.round(threshHold))
+                var threshHoldDistance =((result?.routes[0]?.distanceMeters / 1000) - myReqData.routeDistance) * 100 / myReqData.routeDistance;
+                
+
+                console.log('thresh', threshHold);
+                return [threshHold, threshHoldDistance];
+            } else return [9999999, 999999]
+        } catch (error) {
+            alert("error new 2" + error)
+            
+        }
+        console.log('error')
+        return [9999999,99999]
+    }
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests, requests]);
-    
+
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {
@@ -112,12 +221,20 @@ const FindScheduledRider = () => {
                     const responseData = doc.data();
                     console.log(responseData)
                     // Check if myReqData.id exists in responses
-                    const myReqResponse = responseData.responsesHost?.find(response => response.responseBy === currentUser?._id);
+                    const myReqResponse = responseData.responsesScheduledHost?.find(response => response.responseBy === currentUser?._id);
                     console.log(myReqResponse)
                     if (myReqResponse && myReqResponse.status === 'confirmed') {
                         setShowAcceptModal(false)
                         // Status changed to accepted, navigate to "during ride" screen
                         navigation.navigate('DuringRideHost', { requestId: myReqData.id });
+                    }
+                    if (myReqResponse && myReqResponse.status === 'rejected') {
+                        setShowAcceptModal(false)
+                        Alert.alert(
+                            'Request Rejected',
+                            'Rider has rejected your request. Find other riders...',
+                            [{ text: 'OK' }]
+                        );
                     }
                 }
             });
@@ -135,12 +252,100 @@ const FindScheduledRider = () => {
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
                 !declinedRequests.includes(request.id) &&
-                request.createdBy !=currentUser._id
+                request.createdBy != currentUser._id
             );
         });
         setFilteredRequests(filtered);
     };
+    const isCompatible = (request, myReq) => {
+        const reqStartDate = new Date(request.startDate);
+        const reqEndDate = new Date(request.endDate);
+        const myStartDate = myReq.startDate;
+        const myEndDate = myReq.endDate;
 
+        if (myStartDate > reqEndDate || myEndDate < reqStartDate) {
+            console.log('date not matched')
+            return 0;
+        }
+        if (!myReq.roundTrip && request.roundTrip) {
+            console.log('round trip not compatible')
+            return 0;
+        }
+
+        const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const requiredDays = daysOfWeek.filter(day => request.schedule[day] != null);
+        var match = 0;
+        for (let day of requiredDays) {
+            if (request.schedule[day] && myReq.schedule[day]) {
+                const reqSchedule = request.schedule[day];
+                const mySchedule = myReq.schedule[day];
+                if (reqSchedule && mySchedule) {
+                if (parseTimeStringToDateTime(reqSchedule.Other).getTime() >= parseTimeStringToDateTime(mySchedule.Earliest).getTime() + request.routeTime &&
+                parseTimeStringToDateTime(reqSchedule.Earliest).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule.Other).getTime()) {
+                    if (request.roundTrip && myReq.roundTrip) {
+                        if (parseTimeStringToDateTime(reqSchedule.Return).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule['Return Dropoff']).getTime() &&
+                        parseTimeStringToDateTime(reqSchedule['Return Dropoff']).getTime() >= parseTimeStringToDateTime(mySchedule.Return).getTime() + request.routeTime) {
+                            match += 1;
+                        }
+                        else {
+                            match += 0.5;
+                        }
+                    } else if(!request.roundTrip){
+                        match += 1;
+                    }
+                }}
+            }
+        }
+        console.log('Days matched', match)
+        return match;
+    };
+
+    const findConsolidatedMatches = (allRequests, myReq) => {
+        const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const requiredDays = daysOfWeek.filter(day => request.schedule[day] != null);
+
+        const getMatchingRequestsForDay = (day) => {
+            return allRequests.filter(request =>
+                myReq.schedule[day]?.enabled &&
+                (reqSchedule.Other.getTime() <= mySchedule.Earliest.getTime() + request.routeTime &&
+                    reqSchedule.Earliest.getTime() + myReq.routeTime >= mySchedule.Other.getTime() &&
+                    reqSchedule.Return.getTime() + myReq.routeTime >= mySchedule.ReturnDropoff.getTime() &&
+                    reqSchedule.ReturnDropoff.getTime() === mySchedule.Return.getTime() + request.routeTime)
+            );
+        };
+
+        const findCombinations = (days, currentCombo = [], remainingDays = requiredDays) => {
+            if (remainingDays.length === 0) {
+                return [currentCombo];
+            }
+
+            const nextDay = remainingDays[0];
+            const matchingRequests = getMatchingRequestsForDay(nextDay);
+            let combinations = [];
+
+            matchingRequests.forEach(request => {
+                const newCombo = [...currentCombo, request];
+                const newRemainingDays = remainingDays.slice(1);
+                const newCombinations = findCombinations(days, newCombo, newRemainingDays);
+                combinations = [...combinations, ...newCombinations];
+            });
+
+            return combinations;
+        };
+
+        const consolidated = findCombinations(requiredDays);
+
+        // Filter out combinations that do not cover all required days
+        const validConsolidated = consolidated.filter(combo => {
+            const coveredDays = combo.map(request => {
+                return Object.keys(request.schedule).filter(day => request.schedule[day].enabled);
+            }).flat();
+
+            return requiredDays.every(day => coveredDays.includes(day));
+        });
+
+        return validConsolidated;
+    };
 
     const toggleFilter = (filter) => {
         setFilters(prevFilters => ({
@@ -150,36 +355,36 @@ const FindScheduledRider = () => {
     };
     const handleAcceptance = async (reqID) => {
         setSelectedRequestId(reqID)
-       
+
         // Add or update response in Firestore
-        
+
         try {
-            const responseRef = doc(firestoreDB, 'responsesHost', reqID);
+            const responseRef = doc(firestoreDB, 'responsesScheduledHost', reqID);
             const docSnapshot = await getDoc(responseRef);
             console.log('ok')
             console.log(response)
             console.log(myReqData)
             if (docSnapshot.exists()) {
                 console.log(docSnapshot.data())
-                const responseIndex = docSnapshot.data().responsesHost.findIndex(response => response.responseBy === currentUser?._id);
+                const responseIndex = docSnapshot.data().responsesScheduledHost.findIndex(response => response.responseBy === currentUser?._id);
                 console.log(responseIndex)
                 if (responseIndex == -1) {
-                // Document already exists, update it
-                await updateDoc(responseRef, {
-                    responsesHost: [...docSnapshot.data().responsesHost, response]
-                });
-            }else{
-                const existingData=docSnapshot.data()
-                existingData.responsesHost[responseIndex]=response
-                console.log('d',existingData)
-                await updateDoc(responseRef, 
-                   {responsesHost: existingData.responsesHost}
-                );
-            }
+                    // Document already exists, update it
+                    await updateDoc(responseRef, {
+                        responsesScheduledHost: [...docSnapshot.data().responsesScheduledHost, response]
+                    });
+                } else {
+                    const existingData = docSnapshot.data()
+                    existingData.responsesScheduledHost[responseIndex] = response
+                    console.log('d', existingData)
+                    await updateDoc(responseRef,
+                        { responsesScheduledHost: existingData.responsesScheduledHost }
+                    );
+                }
             } else {
                 // Document doesn't exist, create it with the accepted request ID
                 await setDoc(responseRef, {
-                    responsesHost: [response]
+                    responsesScheduledHost: [response]
                 });
             }
             setShowAcceptModal(true)
@@ -191,14 +396,14 @@ const FindScheduledRider = () => {
     const handleCancel = async () => {
         setShowAcceptModal(false)
         try {
-            const responseRef = doc(firestoreDB, 'responsesHost', selectedRequestId);
+            const responseRef = doc(firestoreDB, 'responsesScheduledHost', selectedRequestId);
             const responseData = await getDoc(responseRef);
             if (responseData.exists()) {
-                
-                const responseIndex = responseData.data().responsesHost.findIndex(response => response.responseBy === currentUser?._id);
+
+                const responseIndex = responseData.data().responsesScheduledHost.findIndex(response => response.responseBy === currentUser?._id);
                 if (responseIndex !== -1) {
                     const updatedData = { ...responseData.data() };
-                    updatedData.responsesHost[responseIndex].status = 'cancelled';
+                    updatedData.responsesScheduledHost[responseIndex].status = 'cancelled';
                     await updateDoc(responseRef, updatedData);
                 } else {
                     console.error('Response not found for the current user.');
@@ -227,8 +432,8 @@ const FindScheduledRider = () => {
                 </View>
 
                 <View style={{ paddingRight: 10 }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>  
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft:'auto' }]}>Seats: {item.seats}</Text>        
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
+                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
                     <View style={styles.callChatIcons}>
                         <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
                             <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
@@ -238,20 +443,33 @@ const FindScheduledRider = () => {
                         </TouchableOpacity>}
                     </View>
                 </View>
-               
+
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' , marginLeft:'auto', paddingRight:10}}>
+            <View style={{ flexDirection: 'row' }}>
+                <View style={{ flexDirection: 'column' }}>
+                    <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
+                    <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginRight: 'auto' }}>
+                        <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
+                        <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
+                    </View>
+                </View>
+                <View style={{ marginLeft: 'auto' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', paddingRight: 10 }}>
                         <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
                         <Text style={{ fontWeight: 'bold', fontSize: 14 }}> - </Text>
                         <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
                     </View>
-            <View style={{ flexDirection: 'row' }}>
-                <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginLeft: 'auto' }}>
-                    <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
-                    <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
+
+                    <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }}>
+                        {daysOfWeek.map((day, index) => (
+                            <TouchableOpacity key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
+                                <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
             </View>
+
             <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
                     <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
@@ -288,13 +506,16 @@ const FindScheduledRider = () => {
 
             </View>
             {isLoading && (
-          <ActivityIndicator size={"large"} color={GlobalColors.primary} />
-        )}
-        {console.log(isLoading)}
+                <ActivityIndicator size={"large"} color={GlobalColors.primary} />
+            )}
+            {console.log(isLoading)}
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
                 key={item => item.id}
+                ListEmptyComponent={() => {
+                    return isLoading ? null : <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}><Text style={{ color: 'black' }}>No Request found!</Text></View>
+                }}
             />
             <Modal
                 visible={showAcceptModal}
@@ -304,8 +525,8 @@ const FindScheduledRider = () => {
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalText}>Waiting for confirmation...</Text>
-                        <TouchableOpacity style={[styles.button, {flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
-                            <Text  style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
+                        <TouchableOpacity style={[styles.button, { flex: 0, backgroundColor: GlobalColors.error }]} onPress={async () => await handleCancel()}>
+                            <Text style={[styles.textBold, { color: GlobalColors.background }]}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -345,7 +566,7 @@ const FindScheduledRider = () => {
                                 style={{ marginLeft: 'auto' }}
                             />
                         </View>
-                        
+
                         <View style={styles.filterItem}>
                             <Text style={styles.filterText}>Rating</Text>
                             <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
@@ -553,6 +774,26 @@ const styles = StyleSheet.create({
         fontSize: 20,
         marginBottom: 10,
         textAlign: 'center',
+    },
+    dayContainer: {
+        width: 20,
+        height: 20,
+        borderRadius: 20,
+        backgroundColor: 'lightgrey',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginHorizontal: 1,
+    },
+    activeDay: {
+        backgroundColor: GlobalColors.primary,
+    },
+    dayText: {
+        fontSize: 12,
+        color: GlobalColors.text
+    },
+    activeText: {
+        color: GlobalColors.background,
+        fontWeight: 'bold'
     },
     filterItem: {
         flexDirection: 'row',

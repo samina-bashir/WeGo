@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Linking, ActivityIndicator } from 'react-native';
-import { collection, query, where, doc, getDocs, getDoc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, onSnapshot, updateDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { firestoreDB } from '../config/firebase.config';
 import { Avatar, Icon, Input, Switch } from 'react-native-elements';
 import GlobalColors from '../styles/globalColors';
@@ -15,6 +15,7 @@ const FindRiderScreen = () => {
 
     const [isLoading, setIsLoading] = useState(true)
     const [requests, setRequests] = useState([]);
+    const [rawRequests, setRawRequests] = useState([]);
     const [filteredRequests, setFilteredRequests] = useState([]);
     const navigation = useNavigation();
     const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -28,7 +29,8 @@ const FindRiderScreen = () => {
     const [selectedItem, setItem] = useState(null);
     const [declinedRequests, setDeclinedRequests] = useState([]);
     const [showAcceptModal, setShowAcceptModal] = useState(false);
-    const currentUser = { _id: 'FZxbp2UoJxThVSBIjIIbGEA3Z202' }//useSelector((state) => state.user.user);
+    const currentUser = useSelector((state) => state.user.user);
+    // { _id: 'FZxbp2UoJxThVSBIjIIbGEA3Z202' }
     const [selectedRequestId, setSelectedRequestId] = useState(null);
 
 
@@ -43,7 +45,7 @@ const FindRiderScreen = () => {
         seats: myReqData?.seats
     };
 
-    const chechkWayPoints = (fromLat, toLat, fromLong, toLong, onSuccess) => {
+    const chechkWayPoints = async (fromLat, toLat, fromLong, toLong, onSuccess) => {
         try {
             const myHeaders = new Headers();
             myHeaders.append("Content-Type", "application/json");
@@ -76,41 +78,37 @@ const FindRiderScreen = () => {
                 redirect: "follow",
             };
 
-            fetch(
+            const apiResponse = await fetch(
                 "https://routes.googleapis.com/directions/v2:computeRoutes",
                 requestOptions
             )
-                .then((response) => response.json())
-                .then((result) => {
-                    if (result.routes && result.routes.length > 0) {
-                        // alert(parseInt(myReqData?.routeTime) +" : "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]))
-                        console.log(result);
-                        console.log(myReqData?.routeTime);
-                        let threshHold = 0
-                        let extraTime = 0
-                        console.log(parseInt(result?.routes[0]?.duration?.split('s')[0]))
-                        extraTime = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime)
-                        threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
-                        // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
-                        // alert(" th "+Math.round(threshHold))
-                        console.log('thresh', threshHold);
-                        console.log('extra', extraTime)
-                        if (Math.round(threshHold) < 50) {
+            const result = await apiResponse.json()
+            if (result.routes && result.routes.length > 0) {
+                // alert(parseInt(myReqData?.routeTime) +" : "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]))
+                console.log(result);
+                console.log(myReqData?.routeTime);
+                let threshHold = 0
+                let extraTime = 0
+                console.log(parseInt(result?.routes[0]?.duration?.split('s')[0]))
+                extraTime = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime)
+                threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
+                // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
+                // alert(" th "+Math.round(threshHold))
+                console.log('thresh', threshHold);
+                console.log('extra', extraTime)
+                if (Math.round(threshHold) < 50) {
 
-                            console.log('finallyy')
-                            onSuccess(extraTime)
-                        } else {
-                            console.log('request not upto mark!')
-                            return
-                        }
-                    } else {
-                        console.log('result not ok', result)
-                    }
+                    console.log('finallyy');
+                    await onSuccess(extraTime)
+                } else {
+                    console.log('request not upto mark!')
+                    return
+                }
+            } else {
+                console.log('result not ok', result)
+            }
 
-                }).catch((error) => {
-                    console.error(error)
-                    alert("error new" + error)
-                });
+
         } catch (error) {
             alert("error new 2" + error)
         }
@@ -119,7 +117,7 @@ const FindRiderScreen = () => {
 
     useEffect(() => {
         const fetchRequests = async () => {
-            setIsLoading(true)
+
             // const requestsCollection = collection(firestoreDB, 'findHostRequests');
             // const q = query(requestsCollection);
 
@@ -127,16 +125,23 @@ const FindRiderScreen = () => {
 
             const requestsCollection = collection(firestoreDB, 'findHostRequests');
             const userId = currentUser?._id
-            const q = query(requestsCollection, where('createdBy', '!=', userId));
+            const x = myReqData?.timestamp.toDate()?.getTime() - 60 * 60000;
+            const adjustedDate = new Date(x)
+            const q = query(requestsCollection, where('timestamp', '>', Timestamp.fromDate(adjustedDate)), where('createdBy', '!=', userId), where('currently', '==', 'active'));
             const querySnapshot = await getDocs(q);
 
             const requestsData = [];
-
+            if (querySnapshot?.docs.length == 0) {
+                setIsLoading(false)
+                console.log('no match found')
+            }
             for (const document of querySnapshot.docs) {
                 setIsLoading(true)
+
                 const requestData = document.data();
+                console.log(requestData)
                 if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude) {
-                    chechkWayPoints(requestData.from.latitude, requestData.to.latitude, requestData.from.longitude, requestData.to.longitude, async (extraTime) => {
+                    await chechkWayPoints(requestData.from.latitude, requestData.to.latitude, requestData.from.longitude, requestData.to.longitude, async (extraTime) => {
                         // alert('onSuccess = previous code')
                         const createdBy = requestData.createdBy;
 
@@ -168,38 +173,20 @@ const FindRiderScreen = () => {
                         // alert("document.id" + document.id)
                         requestsData.push({
                             id: document.id,
-                            extraTime: extraTime,
                             ...requestData,
                         });
-                        let filtered = requestsData.sort((a, b) => {
-                            // Compare by AC
-                            if (a.ac == filters.ac) {
-                                return true;
-                            } else {
-                                // Compare by music
-                                if (a.music == filters.music) {
-                                    return true;
-                                } else {
-                                    // Compare by gender
-                                    if ((a.userData.gender === 1 && gender === 'female') || (a.userData.gender === 0 && gender === 'male')) {
-                                        return a.gender.localeCompare(b.gender);
-                                    } else {
-                                        // Compare by fare (low to minimum)
-                                        return a.fare - b.fare;
-                                    }
-                                }
-                            }
-                        });
-                        setRequests(filtered);
-                        setFilteredRequests(filtered);
-                         setIsLoading(false)
+                        setRawRequests(requestsData)
+                        console.log('added request', requestData)
+                        processRequests();
                     })
+                    processRequests();
                 }
             }
 
+
             // setRequests(requestsData);
             // setFilteredRequests(requestsData);
-            console.log(requestsData)
+
         };
 
         fetchRequests();
@@ -208,7 +195,24 @@ const FindRiderScreen = () => {
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests]);
+    const processRequests = () => {
+        console.log(myReqData?.vehicleType)
+        console.log(rawRequests[0]?.vehicleType)
+        const filteredRequests = rawRequests?.filter(request => {
+            return request.vehicleType == myReqData?.vehicleType
+        })
+        
+        const sorted = filteredRequests.sort((a, b) => {
+            if (a.seats === b.seats) {
+                return b.fare - a.fare; // Sort by fare in descending order if seats are the same
+            }
+            return b.seats - a.seats; // Sort by seats in descending order
+        });
+        setRequests(sorted);
+        setFilteredRequests(sorted);
+        setIsLoading(false)
 
+    }
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {
@@ -248,7 +252,7 @@ const FindRiderScreen = () => {
                 request.fare >= fareRange[0] && request.fare <= fareRange[1] &&
                 (gender == 'none' || (request.userData.gender === 1 && gender === 'female') || (request.userData.gender === 0 && gender === 'male')) &&
                 !declinedRequests.includes(request?.id) &&
-                request.createdBy != currentUser._id 
+                request.createdBy != currentUser._id
             );
         }
         )

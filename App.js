@@ -34,6 +34,9 @@ import Constants from 'expo-constants';
 import { createRef } from 'react';
 import { firestoreDB } from './config/firebase.config.js';
 import { Timestamp, doc, updateDoc } from 'firebase/firestore';
+import ResponseScheduledHost from './screens/ResponseScheduledHost.js';
+import ResponseScheduledRider from './screens/ResponseScheduledRider.js';
+import MyScheduledRequests from './screens/MyScheduledRequests.js';
 LogBox.ignoreLogs(['Warning: ...']); // Ignore log notification by message
 LogBox.ignoreAllLogs();
 const Stack = createNativeStackNavigator();
@@ -120,10 +123,10 @@ const responseListener = createRef();
 TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
   const rideEnded = Store.getState().ride.rideEnded
   if (!rideEnded)
-  if (error) {
-    console.error('Error in background location task:', error.message);
-    return;
-  }
+    if (error) {
+      console.error('Error in background location task:', error.message);
+      return;
+    }
   if (!data || !data.locations) {
     console.error('Invalid data structure:', data);
     return;
@@ -159,7 +162,7 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
   const showDirections = Store.getState().ride.showDirections;
   // Loop through waypoints and check if any are near the current location
   const proximityThreshold = 333334.01;
-  
+
   if (waypoints) {
     console.log('fine', waypoints)
     waypoints.forEach(waypoint => {
@@ -199,8 +202,8 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
           if (!isAlreadyConfirmed) {
             confirmedWaypoints.push([waypoint, false, Timestamp.now(), false]);
             Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
-            if(showDirections){
-            schedulePushNotification(waypoint);
+            if (showDirections) {
+              schedulePushNotification(waypoint);
             }
           }
         }
@@ -229,13 +232,13 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
       const confirmedWaypoints = [...Store.getState().ride.confirmedWayPoints];
       console.log('confirmed', confirmedWaypoints)
       const lastWaypoint = confirmedWaypoints[confirmedWaypoints.length - 1];
-      console.log('l',lastWaypoint)
+      console.log('l', lastWaypoint)
       if (!lastWaypoint || lastWaypoint[1] === true) {
         var isAlreadyConfirmed = false;
         console.log('loop range to', confirmedWaypoints.length)
         for (let i = 0; i < confirmedWaypoints.length; i++) {
           console.log('loop', i, confirmedWaypoints[i][0])
-    
+
           if (objectsAreEqual(confirmedWaypoints[i][0], toLocation)) {
             isAlreadyConfirmed = true;
             break;
@@ -243,10 +246,10 @@ TaskManager.defineTask(HOST_TASK, async ({ data, error }) => {
         }
         if (!isAlreadyConfirmed) {
           confirmedWaypoints.push([toLocation, false, Timestamp.now(), false]);
-          console.log('cwp',confirmedWaypoints)
+          console.log('cwp', confirmedWaypoints)
           Store.dispatch(setConfirmedWayPoints(confirmedWaypoints));
-          if(showDirections){
-          scheduleEndNotification(toLocation);
+          if (showDirections) {
+            scheduleEndNotification(toLocation);
           }
         }
       }
@@ -297,8 +300,9 @@ TaskManager.defineTask(RIDER_TASK, async ({ data, error }) => {
     Store.dispatch(setLocation(currentLocation));
   } catch (dispatchError) {
     console.error('Error dispatching location:', dispatchError);
-    return;}
-  
+    return;
+  }
+
 });
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -323,14 +327,14 @@ export default function App() {
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
-          <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
-          <Stack.Screen name="DuringRide" component={DuringRideScreen} />
-          <Stack.Screen name="Splash" component={SplashScreen} />
-           
-           
+            <Stack.Screen name="Splash" component={SplashScreen} />
+            <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
+            <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
+            <Stack.Screen name="DuringRide" component={DuringRideScreen} />
+            <Stack.Screen name="ResponseScheduledHost" component={ResponseScheduledHost} />
+            <Stack.Screen name="ResponseScheduledRider" component={ResponseScheduledRider} />
             <Stack.Screen name="SetLocation" component={SetLocationScreen} />
-            
+            <Stack.Screen name="MyScheduledRequests" component={MyScheduledRequests} />
             <Stack.Screen name="FindScheduledRider" component={FindScheduledRider} />
             <Stack.Screen name="FindScheduledHost" component={FindScheduledHost} />
             <Stack.Screen name="PayFare" component={PayFare} />
