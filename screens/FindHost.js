@@ -360,7 +360,7 @@ const FindHostScreen = () => {
                     if (myReqResponse && myReqResponse.status === 'confirmed') {
                         setShowAcceptModal(false)
                         // Status changed to accepted, navigate to "during ride" screen
-                        navigation.navigate('DuringRideHost', { requestId: selectedRequestId });
+                        navigation.navigate('DuringRide', { requestId: selectedRequestId });
                     }
                     if (myReqResponse && myReqResponse.status === 'rejected') {
                         setShowAcceptModal(false)

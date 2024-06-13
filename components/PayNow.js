@@ -38,6 +38,7 @@ const PayNowOverlay = ({ totalAmount, host, riders, rideID }) => {
             if (response.data.error) {
                 console.log('My error: ', response.data.error);
             }
+            console.log(response.data)
 
             const { error: paymentSheetError } = await initPaymentSheet({
                 merchantDisplayName: 'WeGo - Making Miles Meaningful',

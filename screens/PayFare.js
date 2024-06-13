@@ -8,6 +8,7 @@ import { firestoreDB } from '../config/firebase.config';
 import GlobalColors from '../styles/globalColors';
 import { BASE_URL } from '../config/backend';
 import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 
 const PayFare = () => {
     const [unpaidRide, setUnpaidRide] = useState(null);
@@ -15,8 +16,9 @@ const PayFare = () => {
     const [isVisible, setVisible] = useState(false);
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
     const currentUser = useSelector((state) => state.user.user)
-
+    const navigation = useNavigation()
     useEffect(() => {
+
         const fetchUnpaidRide = async () => {
             try {
                 const ridesRef = collection(firestoreDB, 'ride');
@@ -36,6 +38,7 @@ const PayFare = () => {
                 }
 
                 console.log("No unpaid rides found.");
+                navigation.navigate('RequestCreation');
             } catch (error) {
                 console.error('Error fetching unpaid ride:', error);
             }
@@ -50,8 +53,9 @@ const PayFare = () => {
         if (!unpaidRide) return;
 
         try {
+        console.log(getTotalAmountForCurrentUser(unpaidRide.Riders) * 100)
             const response = await axios.post(BASE_URL + 'payments/intent', {
-                amount: unpaidRide.totalAmount * 100
+                amount: getTotalAmountForCurrentUser(unpaidRide.Riders) * 100
             }, { headers: { 'Content-Type': 'application/json' } });
 
             if (response.error || response.data.error) {
@@ -96,6 +100,7 @@ const PayFare = () => {
                     setOverlayVisible(false);
                     setVisible(true);
                     console.log('Rider fare updated successfully to "paid"');
+                   navigation.navigate('RequestCreation')
                 } else {
                     console.log("Ride does not exist.");
                 }

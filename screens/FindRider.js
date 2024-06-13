@@ -117,7 +117,7 @@ const FindRiderScreen = () => {
 
     useEffect(() => {
         const fetchRequests = async () => {
-
+            console.log('In find rider')
             // const requestsCollection = collection(firestoreDB, 'findHostRequests');
             // const q = query(requestsCollection);
 
@@ -199,7 +199,7 @@ const FindRiderScreen = () => {
         console.log(myReqData?.vehicleType)
         console.log(rawRequests[0]?.vehicleType)
         const filteredRequests = rawRequests?.filter(request => {
-            return true
+            return request.vehicleType == myReqData?.vehicleType
         })
         
         const sorted = filteredRequests.sort((a, b) => {
