@@ -30,7 +30,7 @@ const windowHeight = Dimensions.get('window').height;
 const RequestCreationScreen = () => {
     const [vehicleInfo, setVehicleInfo] = useState(null);
     const [selectedVehicle, setSelectedVehicle] = useState(null);
-    const [userVehicleType, setUserVehicleType] = useState(null);
+    const [userVehicleType, setUserVehicleType] = useState('ride');
     const [seats, setSeats] = useState(1);
     const [hasVehicle, setHasVehicle] = useState(false);
     const [music, setMusic] = useState(false);
@@ -325,7 +325,7 @@ const RequestCreationScreen = () => {
                     const vehicleType = docSnapshot.data().type;
                     const vehicle = vehicles.find(vehicle => vehicle.name === vehicleType);
                     const vehicleId = vehicle ? vehicle.id : null;
-                    setUserVehicleType(vehicleId)
+                  //  setUserVehicleType(vehicleId)
                 } else {
                     console.log('No such document!');
                 }
@@ -362,7 +362,7 @@ const RequestCreationScreen = () => {
         if (!hasVehicle) {
             requestData.vehicleType = selectedVehicle;
         }else{
-            requestData.vehicleType = userVehicleType;
+            requestData.vehicleType = userVehicleType || 'ride';
         }
         try {
             var collectionName = hasVehicle ? 'findRiderRequests' : 'findHostRequests';

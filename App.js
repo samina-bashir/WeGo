@@ -37,6 +37,8 @@ import { Timestamp, doc, updateDoc } from 'firebase/firestore';
 import ResponseScheduledHost from './screens/ResponseScheduledHost.js';
 import ResponseScheduledRider from './screens/ResponseScheduledRider.js';
 import MyScheduledRequests from './screens/MyScheduledRequests.js';
+import MyRidesScreen from './screens/RideHistory.js';
+import RideDetails from './screens/RideDetails.js';
 LogBox.ignoreLogs(['Warning: ...']); // Ignore log notification by message
 LogBox.ignoreAllLogs();
 const Stack = createNativeStackNavigator();
@@ -353,6 +355,8 @@ export default function App() {
             <Stack.Screen name="ResponseHost" component={ResponseHost} />
             <Stack.Screen name="ResponseRider" component={ResponseRider} />
             <Stack.Screen name="MyProfile" component={MyProfile} />
+            <Stack.Screen name="RideHistory" component={MyRidesScreen} />
+            <Stack.Screen name="RideDetail" component={RideDetails} />
           </Stack.Navigator>
         </StripeProvider>
       </Provider>

@@ -466,36 +466,33 @@ const ResponseScheduledHost = ({ route }) => {
 
   const onPressDecline = async (item) => {
     try {
-      const requestRef = doc(firestoreDB, "responsesScheduledHost", ReqId);
-      await runTransaction(firestoreDB, async (transaction) => {
-        const docSnapshot = await transaction.get(requestRef);
-        if (docSnapshot.exists) {
-          const responsesHost = docSnapshot.data().responsesHost;
-          console.log("findRiderReqId is ", item.requestId);
-          const index = responsesHost.findIndex(
-            (response) => response.requestId === item.requestId
-          );
-          if (index !== -1) {
-            responsesHost[index].status = "rejected";
-            transaction.update(requestRef, { responsesHost });
-            console.log("Response status updated successfully!");
+        console.log('item in decline is ',item);
+        const requestRef = doc(firestoreDB, 'responsesSchedukedHost', ReqId);// ReqId is riders's ReqId in responses docid=Hostsid=FindRiderReq doc id
+        await runTransaction(firestoreDB, async (transaction) => {
+            const docSnapshot = await transaction.get(requestRef);
+            if (docSnapshot.exists()) {
+                const responses = docSnapshot.data().responsesScheduledHost;
+                console.log('responses',responses);
+                const index = responses.findIndex((response) => response.requestId === item.requestId);
+                if (index !== -1) {
+                    responses[index].status = 'rejected';
+                    transaction.update(requestRef, { responses });
 
-            setDeclinedRequests((prevRides) =>
-              prevRides.filter(
-                (ride) => ride.requestId !== item.requestId
-              )
-            );
-          } else {
-            console.log("Response not found in the array.");
-          }
-        } else {
-          console.log("Document does not exist.");
-        }
-      });
+                    // Remove the declined request from the responsesdata state
+                    setResponsesHostData(prevResponses => prevResponses.filter(response => response.requestId !== item.requestId));
+
+                    console.log('Response status updated to rejected successfully!');
+                } else {
+                    console.log('Response not found in the array.');
+                }
+            } else {
+                console.log('Document does not exist.');
+            }
+        });
     } catch (error) {
-      console.error("Error updating response status:", error);
+        console.error('Error updating response status:', error);
     }
-  };
+};
 
   const renderRequestItem = ({ item }) => (
     <View style={styles.card}>

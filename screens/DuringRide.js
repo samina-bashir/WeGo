@@ -57,7 +57,7 @@ const DuringRideScreen = () => {
   const [driverData, setDriverData] = useState(null);
   const [rerouteLocation, setRerouteLocation] = useState(null);
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const rideID = useRoute().params?.requestId;
+  const rideID = 'Ri5o1r474TkoTNC0XUZ6'//useRoute().params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
   const YOUR_TASK_NAME = 'rider-background-location-task';

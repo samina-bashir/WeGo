@@ -23,8 +23,8 @@ const ResponseHost  = ({ route }) => {
 
     // console.log('in parameter HostReqId  id of host is : ', hostReqId);
     const [declinedRequests, setDeclinedRequests] = useState([]);
-    const userId='FZxbp2UoJxThVSBIjIIbGEA3Z202';
-
+    const currentUser = useSelector((state) => state.user.user);
+  const userId = currentUser?._id
 
     const [requests, setRequests] = useState([]);
     const [coridersVisible, setCoridersVisible] = useState(false);
@@ -415,21 +415,22 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
         
         const onPressDecline = async (item) => {
             try {
-                const requestRef = doc(firestoreDB, 'responsesHost', ReqId);
+                console.log('item in decline is ',item);
+                const requestRef = doc(firestoreDB, 'responsesHost', ReqId); // ReqId is riders's ReqId in responses docid=Hostsid=FindRiderReq doc id
                 await runTransaction(firestoreDB, async (transaction) => {
                     const docSnapshot = await transaction.get(requestRef);
-                    if (docSnapshot.exists) {
-                        const responsesHost = docSnapshot.data().responsesHost;
-                        console.log('findRiderReqId is ',item.findRiderReqId )
-                        const index = responsesHost.findIndex((response) => response.findRiderReqId === item.findRiderReqId);
+                    if (docSnapshot.exists()) {
+                        const responses = docSnapshot.data().responsesHost;
+                        console.log('responses',responses);
+                        const index = responses.findIndex((response) => response.requestId === item.requestId);
                         if (index !== -1) {
-                            responsesHost[index].status = 'rejected';
-                            transaction.update(requestRef, { responsesHost });
-                            console.log('Response status updated successfully!');
-
-                            setDeclinedRequests(prevRides => prevRides.filter(ride => ride.findRiderReqId !== item.findRiderReqId));
-
-                            
+                            responses[index].status = 'rejected';
+                            transaction.update(requestRef, { responses });
+        
+                            // Remove the declined request from the responsesdata state
+                            setResponsesHostData(prevResponses => prevResponses.filter(response => response.requestId !== item.requestId));
+        
+                            console.log('Response status updated to rejected successfully!');
                         } else {
                             console.log('Response not found in the array.');
                         }
@@ -439,9 +440,8 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
                 });
             } catch (error) {
                 console.error('Error updating response status:', error);
-            }
-        };
-  
+            }
+        };
 
         const renderRequestItem = ({ item }) => (
             <View style={styles.card}>
@@ -512,12 +512,13 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
                           >
                         <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {onPressDecline(item)
-                    setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
-                }}>
-                    
-                        <Text style={[styles.textBold, { color: GlobalColors.background }]} >Decline</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]}
+                    onPress={() => {
+                        onPressDecline(item);
+                        setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
+                    }}>
+                    <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
+                </TouchableOpacity>
     
                 </View>
             </View>

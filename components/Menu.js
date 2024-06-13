@@ -68,12 +68,12 @@ const Menu = ({ setMenuVisible }) => {
             }}>
               <Text style={menustyles.menuItemText}>My Requests</Text>
             </TouchableOpacity>
-           {/* <TouchableOpacity style={menustyles.menuItem} onPress={() => {
+            <TouchableOpacity style={menustyles.menuItem} onPress={() => {
               navigation.navigate("RideHistory")
               setMenuVisible(false)
             }}>
               <Text style={menustyles.menuItemText}>My Rides</Text>
-            </TouchableOpacity>*/}
+            </TouchableOpacity>
             <TouchableOpacity style={menustyles.menuItem} onPress={() => {
               navigation.navigate("MyChats")
               setMenuVisible(false)

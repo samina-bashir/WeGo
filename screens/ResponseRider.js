@@ -313,21 +313,21 @@ const ResponseRider = ({ route }) => {
 
     const onPressDecline = async (item) => {
         try {
-            const requestRef = doc(firestoreDB, 'responsesHost', ReqId);
+            console.log('item in decline is ',item);
+            const requestRef = doc(firestoreDB, 'responses', ReqId); // ReqId is Host's ReqId in responses docid=Hostsid=FindRiderReq doc id
             await runTransaction(firestoreDB, async (transaction) => {
                 const docSnapshot = await transaction.get(requestRef);
-                if (docSnapshot.exists) {
-                    const responsesHost = docSnapshot.data().responsesHost;
-                    console.log('findRiderReqId is ', item.findRiderReqId)
-                    const index = responsesHost.findIndex((response) => response.findRiderReqId === item.findRiderReqId);
+                if (docSnapshot.exists()) {
+                    const responses = docSnapshot.data().responses;
+                    const index = responses.findIndex((response) => response.requestId === item.requestId);
                     if (index !== -1) {
-                        responsesHost[index].status = 'rejected';
-                        transaction.update(requestRef, { responsesHost });
-                        console.log('Response status updated successfully!');
-
-                        setDeclinedRequests(prevRides => prevRides.filter(ride => ride.findRiderReqId !== item.findRiderReqId));
-
-
+                        responses[index].status = 'rejected';
+                        transaction.update(requestRef, { responses });
+    
+                        // Remove the declined request from the responsesdata state
+                        setResponses(prevResponses => prevResponses.filter(response => response.requestId !== item.requestId));
+    
+                        console.log('Response status updated to rejected successfully!');
                     } else {
                         console.log('Response not found in the array.');
                     }

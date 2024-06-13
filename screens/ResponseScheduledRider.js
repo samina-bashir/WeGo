@@ -348,9 +348,35 @@ const ResponseScheduledRider = ({ route }) => {
     //         console.error('Error updating response status:', error);
     //     }
     // };
-    const onPressDecline = () => {
-    setContainerVisible(false);
-    }
+    const onPressDecline = async (item) => {
+        try {
+            console.log('item in decline is ',item);
+            const requestRef = doc(firestoreDB, 'responsesScheduledRider', ReqId);
+            await runTransaction(firestoreDB, async (transaction) => {
+                const docSnapshot = await transaction.get(requestRef);
+                if (docSnapshot.exists()) {
+                    const responses = docSnapshot.data().responsesScheduledRider;
+                    console.log('responses',responses);
+                    const index = responses.findIndex((response) => response.requestId === item.requestId);
+                    if (index !== -1) {
+                        responses[index].status = 'rejected';
+                        transaction.update(requestRef, { responses });
+    
+                        // Remove the declined request from the responsesdata state
+                        setResponses(prevResponses => prevResponses.filter(response => response.requestId !== item.requestId));
+    
+                        console.log('Response status updated to rejected successfully!');
+                    } else {
+                        console.log('Response not found in the array.');
+                    }
+                } else {
+                    console.log('Document does not exist.');
+                }
+            });
+        } catch (error) {
+            console.error('Error updating response status:', error);
+        }
+    };
 
 
 

@@ -55,7 +55,7 @@ const DuringRideHost = () => {
   const showDirection = useSelector(state => state.ride.showDirections);
   const minutesPassed = useSelector(state => state.ride.minutesPassed);
   const navigation = useNavigation();
-  const rideID = useRoute().params?.requestId;
+  const rideID = 'Ri5o1r474TkoTNC0XUZ6'//useRoute().params?.requestId;
   //'Ri5o1r474TkoTNC0XUZ6';//
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)

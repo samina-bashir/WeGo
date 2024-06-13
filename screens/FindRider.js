@@ -96,7 +96,7 @@ const FindRiderScreen = () => {
                 // alert(" th "+Math.round(threshHold))
                 console.log('thresh', threshHold);
                 console.log('extra', extraTime)
-                if (Math.round(threshHold) < 50) {
+                if (Math.round(threshHold) < 70) {
 
                     console.log('finallyy');
                     await onSuccess(extraTime)
@@ -199,7 +199,7 @@ const FindRiderScreen = () => {
         console.log(myReqData?.vehicleType)
         console.log(rawRequests[0]?.vehicleType)
         const filteredRequests = rawRequests?.filter(request => {
-            return request.vehicleType == myReqData?.vehicleType
+            return true
         })
         
         const sorted = filteredRequests.sort((a, b) => {
