@@ -44,6 +44,7 @@ const FindScheduledRider = () => {
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
+    const [visibleSchedule, setVisibleSchedule] = useState(false);
 
     useEffect(() => {
         const fetchRequests = async () => {
@@ -96,7 +97,7 @@ const FindScheduledRider = () => {
                 });
             }
             console.log('requests', requestsData)
-            const filteredRequests = requestsData.filter(request =>  isCompatible(request, myReqData) != 0);
+            const filteredRequests = requestsData.filter(request => isCompatible(request, myReqData) != 0);
             const sorted = filteredRequests.sort((a, b) => {
                 var matches_a = isCompatible(a, myReqData)
                 var matches_b = isCompatible(a, myReqData)
@@ -116,7 +117,7 @@ const FindScheduledRider = () => {
                 console.log('hiii', requestData)
                 if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude && requestData?.routeTime) {
                     var result = await chechkWayPoints(requestData.from?.latitude, requestData.to?.latitude, requestData.from?.longitude, requestData.to?.longitude, requestData.routeTime)
-                    console.log('threshhh', result[0],'ok', result[1])
+                    console.log('threshhh', result[0], 'ok', result[1])
                     if (Math.round(result[0]) < 40 || Math.round(result[1]) < 20) {
                         singleMatches.push(requestData)
                         console.log('adding', singleMatches)
@@ -134,7 +135,7 @@ const FindScheduledRider = () => {
         fetchRequests();
     }, []);
     const parseTimeStringToDateTime = (timeString) => {
-        if(!timeString){
+        if (!timeString) {
             console.log('time not found')
             return new Date().setHours(0);
         }
@@ -195,19 +196,22 @@ const FindScheduledRider = () => {
                 threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
                 // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
                 // alert(" th "+Math.round(threshHold))
-                var threshHoldDistance =((result?.routes[0]?.distanceMeters / 1000) - myReqData.routeDistance) * 100 / myReqData.routeDistance;
-                
+                var threshHoldDistance = ((result?.routes[0]?.distanceMeters / 1000) - myReqData.routeDistance) * 100 / myReqData.routeDistance;
+
 
                 console.log('thresh', threshHold);
                 return [threshHold, threshHoldDistance];
             } else return [9999999, 999999]
         } catch (error) {
             alert("error new 2" + error)
-            
+
         }
         console.log('error')
-        return [9999999,99999]
+        return [9999999, 99999]
     }
+    useEffect(() => {
+        console.log('vis sch', visibleSchedule)
+    }, [visibleSchedule])
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests, requests]);
@@ -280,20 +284,21 @@ const FindScheduledRider = () => {
                 const reqSchedule = request.schedule[day];
                 const mySchedule = myReq.schedule[day];
                 if (reqSchedule && mySchedule) {
-                if (parseTimeStringToDateTime(reqSchedule.Other).getTime() >= parseTimeStringToDateTime(mySchedule.Earliest).getTime() + request.routeTime &&
-                parseTimeStringToDateTime(reqSchedule.Earliest).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule.Other).getTime()) {
-                    if (request.roundTrip && myReq.roundTrip) {
-                        if (parseTimeStringToDateTime(reqSchedule.Return).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule['Return Dropoff']).getTime() &&
-                        parseTimeStringToDateTime(reqSchedule['Return Dropoff']).getTime() >= parseTimeStringToDateTime(mySchedule.Return).getTime() + request.routeTime) {
+                    if (parseTimeStringToDateTime(reqSchedule.Other).getTime() >= parseTimeStringToDateTime(mySchedule.Earliest).getTime() + request.routeTime &&
+                        parseTimeStringToDateTime(reqSchedule.Earliest).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule.Other).getTime()) {
+                        if (request.roundTrip && myReq.roundTrip) {
+                            if (parseTimeStringToDateTime(reqSchedule.Return).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule['Return Dropoff']).getTime() &&
+                                parseTimeStringToDateTime(reqSchedule['Return Dropoff']).getTime() >= parseTimeStringToDateTime(mySchedule.Return).getTime() + request.routeTime) {
+                                match += 1;
+                            }
+                            else {
+                                match += 0.5;
+                            }
+                        } else if (!request.roundTrip) {
                             match += 1;
                         }
-                        else {
-                            match += 0.5;
-                        }
-                    } else if(!request.roundTrip){
-                        match += 1;
                     }
-                }}
+                }
             }
         }
         console.log('Days matched', match)
@@ -415,85 +420,115 @@ const FindScheduledRider = () => {
         }
     };
     const renderRequestItem = ({ item }) => (
-        <View style={styles.card}>
-            <View style={styles.profileSection}>
-                {item.userData?.profilePic ? (<Avatar rounded size={60} source={{ uri: item.userData?.profilePic }} />)
-                    : (
-                        <Avatar rounded size={60} source={require('../assets/avatar.jpg')}
-                        />)}
-                <View style={styles.riderDetails}>
-                    <Text style={styles.text}>{item.userData.name}</Text>
-                    <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
-                    <View style={{ flexDirection: 'row' }}>
-                        <Icon name="star" type="material" color={'gold'} size={15} />
-                        <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
-                    </View>
-
-                </View>
-
-                <View style={{ paddingRight: 10 }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
-                    <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
-                    <View style={styles.callChatIcons}>
-                        <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
-                            <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
-                        </TouchableOpacity>
-                        {item.userData.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${item.userData.phoneNumber}`) }}>
-                            <Icon name="phone-alt" type="font-awesome-5" size={28} color={GlobalColors.primary} />
-                        </TouchableOpacity>}
-                    </View>
-                </View>
-
-            </View>
-            <View style={{ flexDirection: 'row' }}>
-                <View style={{ flexDirection: 'column' }}>
-                    <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
-                    <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginRight: 'auto' }}>
-                        <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
-                        <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
-                    </View>
-                </View>
-                <View style={{ marginLeft: 'auto' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', paddingRight: 10 }}>
-                        <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
-                        <Text style={{ fontWeight: 'bold', fontSize: 14 }}> - </Text>
-                        <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }}>
-                        {daysOfWeek.map((day, index) => (
-                            <TouchableOpacity key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
-                                <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-            </View>
-
-            <View style={{ paddingHorizontal: 10 }}>
-                <View style={{ flexDirection: 'row' }}>
-                    <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> From: {item.from.name} </Text>
-                </View>
-                <View style={{ flexDirection: 'row' }}>
-                    <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> To: {item.to.name} </Text>
-                </View>
-            </View>
-            <View style={{ flexDirection: 'row' }}>
-                <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.accept }]} onPress={async () => await handleAcceptance(item.id)}>
-                    <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
-                    setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
-                }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
-                </TouchableOpacity>
-
-            </View>
-
-        </View>
+        <RequestItem
+            item={item}
+        />
     );
+    const RequestItem = ({ item }) => {
+        const [viewSchedule, setViewSchedule] = useState(false);
+        console.log('sch', viewSchedule)
+        return (<><Modal
+            visible={viewSchedule}
+            transparent={true}
+            animationType='slide'
+        >
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                <View style={{ backgroundColor: 'white', borderRadius: 10, padding: 20, minWidth: 300 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: "center", marginBottom: 10 }}>
+                        <Text style={{ fontWeight: '700', fontSize: 16 }}>Schedule</Text>
+                        <TouchableOpacity onPress={() => { setViewSchedule(false); console.log('ok', visibleSchedule, item.id) }} ><Image source={{ uri: "https://cdn-icons-png.flaticon.com/512/59/59836.png" }} style={{ width: 15, height: 15 }} /></TouchableOpacity>
+                    </View>
+                    {item.schedule?.Monday && item.schedule?.Monday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Monday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Monday?.Earliest} - {item.schedule?.Monday?.Return} </Text></View>}
+                    {item.schedule?.Tuesday && item.schedule?.Tuesday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Tuesday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Tuesday?.Earliest} - {item.schedule?.Tuesday?.Return} </Text></View>}
+                    {item.schedule?.Wednesday && item.schedule?.Wednesday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Wednesday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Wednesday?.Earliest} - {item.schedule?.Wednesday?.Return} </Text></View>}
+                    {item.schedule?.Thursday && item.schedule?.Thursday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Thursday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Thursday?.Earliest} - {item.schedule?.Thursday?.Return} </Text></View>}
+                    {item.schedule?.Friday && item.schedule?.Friday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Friday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Friday?.Earliest} - {item.schedule?.Friday?.Return} </Text></View>}
+                    {item.schedule?.Saturday && item.schedule?.Saturday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Saturday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Saturday?.Earliest} - {item.schedule?.Saturday?.Return} </Text></View>}
+                    {item.schedule?.Sunday && item.schedule?.Sunday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Sunday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Sunday?.Earliest} - {item.schedule?.Sunday?.Return} </Text></View>}
+                </View>
+            </View>
+        </Modal>
+            <View style={styles.card}>
+                <View style={styles.profileSection}>
+                    {item.userData?.profilePic ? (<Avatar rounded size={60} source={{ uri: item.userData?.profilePic }} />)
+                        : (
+                            <Avatar rounded size={60} source={require('../assets/avatar.jpg')}
+                            />)}
+                    <View style={styles.riderDetails}>
+                        <Text style={styles.text}>{item.userData.name}</Text>
+                        <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
+                        <View style={{ flexDirection: 'row' }}>
+                            <Icon name="star" type="material" color={'gold'} size={15} />
+                            <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
+                        </View>
+
+                    </View>
+
+                    <View style={{ paddingRight: 10 }}>
+                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
+                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
+                        <View style={styles.callChatIcons}>
+                            <TouchableOpacity onPress={() => { navigation.navigate('ChatScreen', item.userData) }}>
+                                <Icon name="comment-dots" type="font-awesome-5" size={30} color={GlobalColors.primary} />
+                            </TouchableOpacity>
+                            {item.userData.phoneNumber && <TouchableOpacity onPress={() => { Linking.openURL(`tel:${item.userData.phoneNumber}`) }}>
+                                <Icon name="phone-alt" type="font-awesome-5" size={28} color={GlobalColors.primary} />
+                            </TouchableOpacity>}
+                        </View>
+                    </View>
+
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                    <View style={{ flexDirection: 'column' }}>
+                        <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
+                        <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginRight: 'auto' }}>
+                            <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
+                            <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
+                        </View>
+                    </View>
+                    <View style={{ marginLeft: 'auto' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', paddingRight: 10 }}>
+                            <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
+                            <Text style={{ fontWeight: 'bold', fontSize: 14 }}> - </Text>
+                            <Text style={{ fontStyle: 'italic', fontSize: 13 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
+                        </View>
+
+                        <TouchableOpacity style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }} onPress={() => { setViewSchedule(true) }}>
+                            {daysOfWeek.map((day, index) => (
+                                <View key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
+                                    <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
+                                </View>
+                            ))}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <View style={{ paddingHorizontal: 10 }}>
+                    <View style={{ flexDirection: 'row' }}>
+                        <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+                        <Text style={styles.text}> From: {item.from.name} </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row' }}>
+                        <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+                        <Text style={styles.text}> To: {item.to.name} </Text>
+                    </View>
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.accept }]} onPress={async () => await handleAcceptance(item.id)}>
+                        <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
+                        setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
+                    }}>
+                        <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
+                    </TouchableOpacity>
+
+                </View>
+
+            </View>
+        </>
+        )
+    };
 
     return (
         <View style={styles.container}>
@@ -512,6 +547,7 @@ const FindScheduledRider = () => {
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
+                keyExtractor={(item) => item.id.toString()}
                 key={item => item.id}
                 ListEmptyComponent={() => {
                     return isLoading ? null : <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}><Text style={{ color: 'black' }}>No Request found!</Text></View>

@@ -97,7 +97,7 @@ const FindHostScreen = () => {
                 var threshHoldDistance =( result?.routes[0]?.distanceMeters / 1000 - routeDistance )* 100 / routeDistance;
                 console.log('thresh', threshHold);
                 console.log('extra', threshHoldDistance)
-                if (Math.round(threshHold) < 65 || Math.round(threshHoldDistance) < 20) {
+                if (Math.round(threshHold) < 40 || Math.round(threshHoldDistance) < 20) {
 
                     console.log('finallyy')
                     await onSuccess(extraTime)

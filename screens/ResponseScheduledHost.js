@@ -41,12 +41,13 @@ const ResponseScheduledHost = ({ route }) => {
   let updatedfare = null;
   // console.log('in parameter HostReqId  id of host is : ', hostReqId);
   const [declinedRequests, setDeclinedRequests] = useState([]);
-  const userId = "FZxbp2UoJxThVSBIjIIbGEA3Z202";
+  const currentUser = useSelector((state) => state.user.user);
+  const userId = currentUser?._id
 
   const [requests, setRequests] = useState([]);
   const [coridersVisible, setCoridersVisible] = useState(false);
   const [selectedItem, setItem] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [noPendingResponses, setNoPendingResponses] = useState(false);
 
   // let globalRideDoc = null;
@@ -58,14 +59,16 @@ const ResponseScheduledHost = ({ route }) => {
 
   useEffect(() => {
     const fetchResponses = async () => {
+      setLoading(true)
       try {
-        const q = doc(collection(firestoreDB, "responsesSchedukedHost"), ReqId);//rider 
+        const q = doc(collection(firestoreDB, "responsesScheduledHost"), ReqId);//rider 
         const querySnapshot = await getDoc(q);
 
         if (!querySnapshot.exists()) {
           console.log("No matching document found for responses");
           setNoPendingResponses(true);
           setResponsesHostData([]);
+          setLoading(false)
           return;
         }
 
@@ -153,6 +156,7 @@ const ResponseScheduledHost = ({ route }) => {
         } else {
           console.log("responses array not found in the document");
           setResponsesHostData([]);
+          setLoading(false)
         }
 
 
@@ -226,7 +230,7 @@ const ResponseScheduledHost = ({ route }) => {
                         // Update fare for every rider in the Riders array
                         const updatedRiders = rideData.Riders.map(rider => ({
                             ...rider,
-                            fare: rider.fare * 0.60
+                            fare: Math.floor(rider.fare * 0.60)
                         }));
 
                         // Update the document with the modified Riders array
@@ -251,7 +255,7 @@ const ResponseScheduledHost = ({ route }) => {
                          // Update fare for every rider in the Riders array 
                          const updatedRiders = rideData.Riders.map(rider => ({
                              ...rider,
-                             fare: rider.fare * 0.80
+                             fare: Math.floor(rider.fare * 0.80)
                          }));
  
                          // Update the document with the modified Riders array
@@ -358,7 +362,7 @@ const ResponseScheduledHost = ({ route }) => {
             status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
             fare: updatedFare,
             paid: false,
-            rider: responseBy
+            rider: currentUser?._id
         }];
 
         await updateDoc(rideRef, { Riders: updatedRiders });
@@ -377,7 +381,7 @@ const ResponseScheduledHost = ({ route }) => {
                     status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
                     fare: updatedFare,
                     paid: false,
-                    rider: responseBy
+                    rider: currentUser?._id
                 }]
             });
             console.log('done by updaterideinfo')

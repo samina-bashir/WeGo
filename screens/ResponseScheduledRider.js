@@ -19,7 +19,6 @@ const ResponseScheduledRider = ({ route }) => {
     var updatedfare = null;
 
     console.log('in parameter HostReqId  id of host is : ', hostReqId);
-    const userId = 'FZxbp2UoJxThVSBIjIIbGEA3Z202';
 
     const [responsesdata, setResponses] = useState([]);
     const navigation = useNavigation();
@@ -30,9 +29,11 @@ const ResponseScheduledRider = ({ route }) => {
     const [noPendingResponses, setNoPendingResponses] = useState(false);
     const [loading, setLoading] = useState(true);
 
-
+    const currentUser = useSelector((state) => state.user.user);
+    const userId = currentUser?._id
     useEffect(() => {
         const fetchResponses = async () => {
+            setLoading(true)
             try {
                 const q = doc(collection(firestoreDB, 'responsesScheduledRider'), ReqId);//ReqId is host id
                 const querySnapshot = await getDoc(q);
@@ -41,6 +42,7 @@ const ResponseScheduledRider = ({ route }) => {
                     console.log('No matching document found for responses');
                     setNoPendingResponses(true);
                     setResponses([]);
+                    setLoading(false)
                     return;
                 }
 
@@ -68,7 +70,7 @@ const ResponseScheduledRider = ({ route }) => {
                             const coR = coriders.exists() ? coriders.data().Riders : {};
         
                             updatedResponsesData.push({
-                                fare: res.fare,
+                                fare: Math.floor(res.fare),
                                 from: res.from,
                                 to: res.to,
                                 status: res.status,
@@ -89,7 +91,10 @@ const ResponseScheduledRider = ({ route }) => {
                 else {
                     console.log('responses array not found in the document');
                     setResponses([]);
+                    setLoading(false)
+                    setNoPendingResponses(true)
                 }
+                
 
            
             } catch (error) {
@@ -118,7 +123,7 @@ const ResponseScheduledRider = ({ route }) => {
             }
             if(!isPresent){
             const newRideData = {
-              fare: item.fare,
+              fare: Math.floor(item.fare),
               from: item.from,
               to: item.to,
               paid: false,
@@ -127,7 +132,7 @@ const ResponseScheduledRider = ({ route }) => {
             };
             try{
                 await updateDoc(docSnapshot.ref, {
-                    Riders:previousRiders ? [ ...previousRiders, newRideData] : [newRideData],
+                    Riders: previousRiders ? [ ...previousRiders, newRideData] : [newRideData],
                   }).catch((error)=>{
                     if(error.toString().includes('not-found')){
                          setDoc(doc(firestoreDB, "ride", item.requestId),  {
@@ -161,7 +166,7 @@ const ResponseScheduledRider = ({ route }) => {
                 from: itemfrom,
                 to: itemto,
                 status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
-                fare: updatedFare,
+                fare: Math.floor(updatedFare),
                 paid: false,
                 rider: responseBy
             }];
@@ -175,7 +180,7 @@ const ResponseScheduledRider = ({ route }) => {
                 await setDoc(rideRef, {
                     from: data.from,
                     to: data.to,
-                    Host: data.createdBy,
+                    Host: currentUser?._id,
                     Riders: [{
                         from: itemfrom,
                         to: itemto,
@@ -228,7 +233,7 @@ const ResponseScheduledRider = ({ route }) => {
                             // Update fare for every rider in the Riders array
                             const updatedRiders = rideData.Riders.map(rider => ({
                                 ...rider,
-                                fare: rider.fare * 0.60
+                                fare: Math.floor(rider.fare * 0.60)
                             }));
     
                             // Update the document with the modified Riders array
@@ -319,7 +324,7 @@ const ResponseScheduledRider = ({ route }) => {
 
 
 
-    // const onPressDecline = async (item) => {
+   
     //     try {
             
     //         const requestRef = doc(firestoreDB, 'responsesScheduledRider', ReqId);
@@ -419,11 +424,6 @@ const ResponseScheduledRider = ({ route }) => {
                 </View>
             </View>
             <View style={{ flexDirection: 'row' }}>
-
-                {/* <View style={{ flexDirection: 'row', paddingHorizontal: 10, marginLeft: 'auto' }}>
-                    <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
-                    <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
-                </View> */}
             </View>
             <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
@@ -460,7 +460,6 @@ const ResponseScheduledRider = ({ route }) => {
         <View style={styles.container}>
             <Text style={styles.heading}>Riders' Responses</Text>
             {loading ? (
-            
             <ActivityIndicator size="large" color="#0c2442" marginTop='120' />
         ) : noPendingResponses ? (
                 <Text style={styles.noResponsesText}>No responses for now</Text>

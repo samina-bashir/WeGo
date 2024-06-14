@@ -94,9 +94,11 @@ const FindRiderScreen = () => {
                 threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
                 // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
                 // alert(" th "+Math.round(threshHold))
+                var threshHoldDistance =( result?.routes[0]?.distanceMeters / 1000 - MyReqData.routeDistance )* 100 / MyReqData.routeDistance;
+                
                 console.log('thresh', threshHold);
                 console.log('extra', extraTime)
-                if (Math.round(threshHold) < 70) {
+                if (Math.round(threshHold) < 40 || Math.round(threshHoldDistance) < 20) {
 
                     console.log('finallyy');
                     await onSuccess(extraTime)
@@ -177,9 +179,24 @@ const FindRiderScreen = () => {
                         });
                         setRawRequests(requestsData)
                         console.log('added request', requestData)
-                        processRequests();
+                        console.log(myReqData?.vehicleType)
+                        console.log(requestsData[0])
+                        console.log(requestsData[0]?.vehicleType)
+                        const filteredRequests = requestsData?.filter(request => {
+                            return request.vehicleType == myReqData?.vehicleType
+                        })
+                        
+                        const sorted = filteredRequests.sort((a, b) => {
+                            if (a.seats === b.seats) {
+                                return b.fare - a.fare; // Sort by fare in descending order if seats are the same
+                            }
+                            return b.seats - a.seats; // Sort by seats in descending order
+                        });
+                        setRequests(sorted);
+                        setFilteredRequests(sorted);
+                        setIsLoading(false)
                     })
-                    processRequests();
+                   setIsLoading(false)
                 }
             }
 
@@ -195,24 +212,7 @@ const FindRiderScreen = () => {
     useEffect(() => {
         applyFilters();
     }, [filters, gender, ratingRange, fareRange, declinedRequests]);
-    const processRequests = () => {
-        console.log(myReqData?.vehicleType)
-        console.log(rawRequests[0]?.vehicleType)
-        const filteredRequests = rawRequests?.filter(request => {
-            return request.vehicleType == myReqData?.vehicleType
-        })
-        
-        const sorted = filteredRequests.sort((a, b) => {
-            if (a.seats === b.seats) {
-                return b.fare - a.fare; // Sort by fare in descending order if seats are the same
-            }
-            return b.seats - a.seats; // Sort by seats in descending order
-        });
-        setRequests(sorted);
-        setFilteredRequests(sorted);
-        setIsLoading(false)
-
-    }
+   
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {

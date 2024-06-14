@@ -19,9 +19,8 @@ const ResponseRider = ({ route }) => {
 
     const hostReqId = ReqId;
     let updatedfare = null;
-
- 
-    const userId = 'FZxbp2UoJxThVSBIjIIbGEA3Z202';
+    const currentUser = useSelector((state) => state.user.user);
+    const userId = currentUser?._id
 
     const [responsesdata, setResponses] = useState([]);
     const navigation = useNavigation();
@@ -141,7 +140,7 @@ const ResponseRider = ({ route }) => {
                 console.log({
                     from: data.from,
                     to: data.to,
-                    Host: data.createdBy,
+                    Host: currentUser?._id,
                     Riders: [{
                         from: itemfrom,
                         to: itemto,
@@ -154,7 +153,7 @@ const ResponseRider = ({ route }) => {
                 await setDoc(rideRef, {
                     from: data.from,
                     to: data.to,
-                    Host: data.createdBy,
+                    Host: currentUser?._id,
                     Riders: [{
                         from: itemfrom,
                         to: itemto,
@@ -208,7 +207,7 @@ const ResponseRider = ({ route }) => {
                             // Update fare for every rider in the Riders array
                             const updatedRiders = rideData.Riders.map(rider => ({
                                 ...rider,
-                                fare: rider.fare * 0.60
+                                fare: Math.floor(rider.fare * 0.60)
                             }));
     
                             // Update the document with the modified Riders array

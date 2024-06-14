@@ -76,7 +76,7 @@ useEffect(() => {
                         const userData = userSnapshot.exists() ? userSnapshot.data() : {};
         
                         console.log('In fetch data host id to find in ride is ',hostReqId )
-                        const coriderRef = doc(firestoreDB, 'ride', 'Ri5o1r474TkoTNC0XUZ6');
+                        const coriderRef = doc(firestoreDB, 'ride', hostReqId);
                         const coriders = await getDoc(coriderRef);
                         const coR = coriders.exists() ? coriders.data().Riders : {};
         
@@ -190,6 +190,8 @@ const updatefare = async (item) => {
             // updated_seats 
             console.log('item.seats ',item.seats)
             var updated_seats;
+            console.log('host seats',host_seats, typeof(host_seats))
+            console.log('rider seats',rider_seats, typeof(rider_seats))
             updated_seats=host_seats-rider_seats;
 
 
@@ -215,7 +217,7 @@ const updatefare = async (item) => {
                         // Update fare for every rider in the Riders array
                         const updatedRiders = rideData.Riders.map(rider => ({
                             ...rider,
-                            fare: rider.fare * 0.60
+                            fare: Math.floor(rider.fare * 0.60)
                         }));
 
                         // Update the document with the modified Riders array
@@ -240,7 +242,7 @@ const updatefare = async (item) => {
                          // Update fare for every rider in the Riders array 
                          const updatedRiders = rideData.Riders.map(rider => ({
                              ...rider,
-                             fare: rider.fare * 0.80
+                             fare: Math.floor(rider.fare * 0.80)
                          }));
  
                          // Update the document with the modified Riders array
@@ -301,7 +303,7 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
             status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
             fare: updatedFare,
             paid: false,
-            rider: responseBy
+            rider: currentUser?._id
         }];
 
         await updateDoc(rideRef, { Riders: updatedRiders });
@@ -321,7 +323,7 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
                     status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
                     fare: updatedFare,
                     paid: false,
-                    rider: responseBy
+                    rider: currentUser?._id
                 }]
             })
             await setDoc(rideRef, {
@@ -334,7 +336,7 @@ async function updateRideInfo(hostReqId, itemfrom, itemto, itemstatus, updatedFa
                     status: itemstatus === 'pending' ? 'inProgress' : itemstatus,
                     fare: updatedFare,
                     paid: false,
-                    rider: responseBy
+                    rider: currentUser?._id
                 }]
             });
             console.log('done')

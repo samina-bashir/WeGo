@@ -109,7 +109,7 @@ const PayFare = () => {
             }
         } catch (error) {
             console.error('Payment error:', error.message);
-            Alert.alert('Payment failed', error.message);
+            alert('Payment failed', error.message);
         }
     };
 

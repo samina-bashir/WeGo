@@ -55,7 +55,7 @@ const DuringRideHost = () => {
   const showDirection = useSelector(state => state.ride.showDirections);
   const minutesPassed = useSelector(state => state.ride.minutesPassed);
   const navigation = useNavigation();
-  const rideID = 'Ri5o1r474TkoTNC0XUZ6'//useRoute().params?.requestId;
+  const rideID = useRoute().params?.requestId;
   //'Ri5o1r474TkoTNC0XUZ6';//
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
@@ -405,7 +405,7 @@ const DuringRideHost = () => {
   const cancelRide = async () => {
     try {
       dispatch(setCancelledByMe(true))
-      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
       const updatedRiders = [...rideDetails.Riders];
       for (let i = 0; i < rideDetails.Riders.length; i++) {
         const rider = rideDetails.Riders[i];
@@ -628,12 +628,12 @@ const DuringRideHost = () => {
   return (
     <>
       <GestureHandlerRootView style={styles.container}>
-
-        <View style={{ flexDirection: 'row' }} >
+{!isLoading &&
+        (<View style={{ flexDirection: 'row' }} >
           <Text style={{ fontSize: 14, color: GlobalColors.background, paddingVertical: 7, paddingHorizontal: 15 }}>Route Distance: {distance} km</Text>
           <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft: 'auto', paddingVertical: 7, paddingHorizontal: 15 }}>Estimated Time: {formatDuration(duration)}</Text>
 
-        </View>
+        </View>)}
         {showTimerPopup &&
           <View style={{ backgroundColor: 'red', padding: 10, borderRadius: 10 }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: GlobalColors.background, marginLeft: 'auto' }}>

@@ -27,7 +27,7 @@ const DuringRideScreen = () => {
   const minutesPassed = useSelector(state => state.ride.minutesPassed)
   const [targetTime, setTargetTime] = useState(null);
   const [timerTime, setTimerTime] = useState(30);
-  const [rideDetailsHeight, setRideDetailsHeight] = useState(280);
+  const [rideDetailsHeight, setRideDetailsHeight] = useState(330);
   const initialRegion = {
     latitude: 31.480864,
     longitude: 74.303114,
@@ -57,7 +57,7 @@ const DuringRideScreen = () => {
   const [driverData, setDriverData] = useState(null);
   const [rerouteLocation, setRerouteLocation] = useState(null);
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const rideID = 'Ri5o1r474TkoTNC0XUZ6'//useRoute().params?.requestId;
+  const rideID = useRoute().params?.requestId;
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
   const YOUR_TASK_NAME = 'rider-background-location-task';
@@ -425,7 +425,7 @@ const DuringRideScreen = () => {
         });
 
         scheduleEndNotification(toLocation);
-        setPayNow(true);
+        setPayNow(false);
         while (!rideEnded) {
           var a = 0;
           console.log(rideEnded)
@@ -580,7 +580,7 @@ const DuringRideScreen = () => {
     try {
 
       const currentUserIndex = rideDetails.Riders.findIndex(rider => rider.rider === currentUser._id);
-      const rideRef = doc(collection(firestoreDB, 'ride'), 'Ri5o1r474TkoTNC0XUZ6');
+      const rideRef = doc(collection(firestoreDB, 'ride'), rideID);
       if (currentUserIndex !== -1) {
         const updatedRiders = [...rideDetails.Riders];
         updatedRiders[currentUserIndex].status = "Cancelled";
@@ -632,11 +632,11 @@ const DuringRideScreen = () => {
     const newHeight = rideDetailsHeight + offsetY;
 
     if (event.nativeEvent.state === State.ACTIVE) {
-      if (newHeight <= 280) {
-        setRideDetailsHeight(280);
+      if (newHeight <= 330) {
+        setRideDetailsHeight(330);
       } else if (newHeight >= 600) {
         setRideDetailsHeight(600);
-      } else if (newHeight >= 280 && newHeight <= 600) {
+      } else if (newHeight >= 330 && newHeight <= 600) {
         setRideDetailsHeight(newHeight);
       }
     }
@@ -656,11 +656,11 @@ const DuringRideScreen = () => {
   return (
     <>
       <GestureHandlerRootView style={styles.container}>
-        <View style={{ flexDirection: 'row' }} >
+       {!isLoading && (<View style={{ flexDirection: 'row' }} >
           <Text style={{ fontSize: 14, color: GlobalColors.background, paddingVertical: 7, paddingHorizontal: 15 }}>Route Distance: {distance} km</Text>
           <Text style={{ fontSize: 14, color: GlobalColors.background, marginLeft: 'auto', paddingVertical: 7, paddingHorizontal: 15 }}>Estimated Time: {formatDuration(duration)}</Text>
 
-        </View>
+        </View>)}
         {showTimerPopup &&
           <View style={{ backgroundColor: 'red', padding: 10, borderRadius: 10 }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: GlobalColors.background, marginLeft: 'auto' }}>
@@ -836,7 +836,7 @@ const DuringRideScreen = () => {
               <TouchableOpacity style={styles.cancelButton} onPress={cancelRide}>
                 <Text style={styles.cancelButtonText}>CANCEL RIDE</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { coriders.length == 0 ? setRideDetailsHeight(290) : setRideDetailsHeight(280 + 70 * coriders.length) }}>
+              <TouchableOpacity onPress={() => { coriders.length == 0 ? setRideDetailsHeight(330) : setRideDetailsHeight(330 + 70 * coriders.length) }}>
                 <Text style={{ color: GlobalColors.primary, fontSize: 25, fontWeight: 'bold' }}>Co-Riders</Text>
               </TouchableOpacity>
 

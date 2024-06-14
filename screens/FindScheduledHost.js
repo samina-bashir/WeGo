@@ -48,7 +48,7 @@ const FindScheduledHost = () => {
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
-    const chechkWayPoints = async (fromLat, toLat, fromLong, toLong, routeTime) => {
+    const chechkWayPoints = async (fromLat, toLat, fromLong, toLong, routeTime, routeDistance) => {
         try {
             const myHeaders = new Headers();
             myHeaders.append("Content-Type", "application/json");
@@ -99,16 +99,19 @@ const FindScheduledHost = () => {
                 // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
                 // alert(" th "+Math.round(threshHold))
                 console.log('thresh', threshHold);
-                console.log('extra', extraTime)
-                return threshHold;
 
-            } else {
-                console.log('result not ok', result)
-                return 999999
-            }
+                var threshHoldDistance = ((result?.routes[0]?.distanceMeters / 1000) - myReqData.routeDistance) * 100 / myReqData.routeDistance;
+
+
+                console.log('thresh', threshHoldDistance);
+                return [threshHold, threshHoldDistance];
+            } else return [9999999, 999999]
         } catch (error) {
-            console.log("ERRORR", error)
+            alert("error new 2" + error)
+
         }
+        console.log('error')
+        return [9999999, 99999]
     }
     useEffect(() => {
         const fetchRequests = async () => {
@@ -160,7 +163,7 @@ const FindScheduledHost = () => {
                     const driverInfoSnapshot = await getDoc(driverInfoRef);
                     requestData.driverInfo = driverInfoSnapshot.exists() ? driverInfoSnapshot.data() : {};
                 }
-               
+
                 requestsData.push({
                     id: document.id,
                     ...requestData,
@@ -191,9 +194,9 @@ const FindScheduledHost = () => {
             for (const requestData of sorted) {
                 console.log('hiii', requestData)
                 if (requestData?.from?.latitude && requestData?.to?.latitude, requestData?.from?.longitude && requestData?.to?.longitude && requestData?.routeTime) {
-                    const result = await chechkWayPoints(requestData.from?.latitude, requestData.to?.latitude, requestData.from?.longitude, requestData.to?.longitude, requestData.routeTime)
+                    const result = await chechkWayPoints(requestData.from?.latitude, requestData.to?.latitude, requestData.from?.longitude, requestData.to?.longitude, requestData.routeTime, requestData.routeDistance)
                     console.log('threshhh', result)
-                    if (Math.round(result) < 50) {
+                    if (Math.round(result[0]) < 40 || Math.round(result[1]) < 20) {
                         singleMatches.push(requestData)
                         console.log('adding', singleMatches)
                     }
@@ -246,8 +249,8 @@ const FindScheduledHost = () => {
                     console.log(reqSchedule)
                     if (parseTimeStringToDateTime(reqSchedule.Other).getTime() >= parseTimeStringToDateTime(mySchedule.Earliest).getTime() + request.routeTime &&
                         parseTimeStringToDateTime(reqSchedule.Earliest).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule.Other).getTime()) {
-                        console.log('halfway', request.id,myReq.schedule[day], request.schedule[day])
-                            if (request.roundTrip && myReq.roundTrip) {
+                        console.log('halfway', request.id, myReq.schedule[day], request.schedule[day])
+                        if (request.roundTrip && myReq.roundTrip) {
                             if (parseTimeStringToDateTime(reqSchedule.Return).getTime() + myReq.routeTime <= parseTimeStringToDateTime(mySchedule['Return Dropoff']).getTime() &&
                                 parseTimeStringToDateTime(reqSchedule['Return Dropoff']).getTime() >= parseTimeStringToDateTime(mySchedule.Return).getTime() + request.routeTime) {
                                 match += 1;
@@ -261,7 +264,7 @@ const FindScheduledHost = () => {
                 }
             }
         }
-        console.log('matched',match)
+        console.log('matched', match)
         return match;
     };
 
@@ -336,95 +339,124 @@ const FindScheduledHost = () => {
             [filter]: !prevFilters[filter]
         }));
     };
-
     const renderRequestItem = ({ item }) => (
-        <View style={styles.card}>
-            <View style={styles.profileSection}>
+        <RequestItem
+            item={item}
+        />
+    );
+    const RequestItem = ({ item }) => {
+        const [viewSchedule, setViewSchedule] = useState(false);
+        console.log('sch', viewSchedule)
+        return (<><Modal
+            visible={viewSchedule}
+            transparent={true}
+            animationType='slide'
+        >
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                <View style={{ backgroundColor: 'white', borderRadius: 10, padding: 20, minWidth: 300 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: "center", marginBottom: 10 }}>
+                        <Text style={{ fontWeight: '700', fontSize: 16 }}>Schedule</Text>
+                        <TouchableOpacity onPress={() => { setViewSchedule(false); console.log('ok', visibleSchedule, item.id) }} ><Image source={{ uri: "https://cdn-icons-png.flaticon.com/512/59/59836.png" }} style={{ width: 15, height: 15 }} /></TouchableOpacity>
+                    </View>
+                    {item.schedule?.Monday && item.schedule?.Monday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Monday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Monday?.Earliest} - {item.schedule?.Monday?.Return} </Text></View>}
+                    {item.schedule?.Tuesday && item.schedule?.Tuesday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Tuesday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Tuesday?.Earliest} - {item.schedule?.Tuesday?.Return} </Text></View>}
+                    {item.schedule?.Wednesday && item.schedule?.Wednesday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Wednesday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Wednesday?.Earliest} - {item.schedule?.Wednesday?.Return} </Text></View>}
+                    {item.schedule?.Thursday && item.schedule?.Thursday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Thursday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Thursday?.Earliest} - {item.schedule?.Thursday?.Return} </Text></View>}
+                    {item.schedule?.Friday && item.schedule?.Friday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Friday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Friday?.Earliest} - {item.schedule?.Friday?.Return} </Text></View>}
+                    {item.schedule?.Saturday && item.schedule?.Saturday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Saturday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Saturday?.Earliest} - {item.schedule?.Saturday?.Return} </Text></View>}
+                    {item.schedule?.Sunday && item.schedule?.Sunday?.enabled && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>Sunday : </Text><Text style={{ marginVertical: 5, fontWeight: '500', color: GlobalColors.secondary }}>{item.schedule?.Sunday?.Earliest} - {item.schedule?.Sunday?.Return} </Text></View>}
+                </View>
+            </View>
+        </Modal>
+            <View style={styles.card}>
+                <View style={styles.profileSection}>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    {item.userData?.profilePic ? (<Avatar rounded size={75} source={{ uri: item.userData?.profilePic }} />)
-                        : (
-                            <Avatar rounded size={75} source={require('../assets/avatar.jpg')}
-                            />)}
-                    <View style={styles.hostDetails}>
-                        <Text style={styles.textBold}>{item.driverInfo?.make} {item.driverInfo?.model}</Text>
-                        <Text style={styles.text}>{item.userData.name}</Text>
-                        <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
-                        <View style={{ flexDirection: 'row' }}>
-                            <Icon name="star" type="material" color={'gold'} size={15} />
-                            <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {item.userData?.profilePic ? (<Avatar rounded size={75} source={{ uri: item.userData?.profilePic }} />)
+                            : (
+                                <Avatar rounded size={75} source={require('../assets/avatar.jpg')}
+                                />)}
+                        <View style={styles.hostDetails}>
+                            <Text style={styles.textBold}>{item.driverInfo?.make} {item.driverInfo?.model}</Text>
+                            <Text style={styles.text}>{item.userData.name}</Text>
+                            <Text style={styles.textMini}>{item.userData.gender === 0 ? 'Male' : 'Female'}</Text>
+                            <View style={{ flexDirection: 'row' }}>
+                                <Icon name="star" type="material" color={'gold'} size={15} />
+                                <Text style={styles.textMed}>{item.userData.rating + ' (' + item.userData.ratingCount + ') '}  </Text>
+                            </View>
+
                         </View>
 
                     </View>
 
-                </View>
+                    <View style={{ paddingRight: 7, backgroundColor: 'white', marginLeft: 'auto' }}>
+                        <View style={{ marginLeft: 'auto' }}>
+                            <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
 
-                <View style={{ paddingRight: 7, backgroundColor: 'white', marginLeft: 'auto' }}>
-                    <View style={{ marginLeft: 'auto' }}>
-                        <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 22, textAlign: 'center' }]}>Rs.{item.fare}</Text>
+                            <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
+                                <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
+                                    Coriders:  {item.coriders?.length}
+                                </Text>
+                            </TouchableOpacity>
+                            <CoriderModal
+                                visible={coridersVisible}
+                                coriders={selectedItem?.coriders}
+                                onClose={() => setCoridersVisible(false)}
+                            />
 
-                        <TouchableOpacity style={{ backgroundColor: GlobalColors.primary, paddingVertical: 5, paddingHorizontal: 7, borderRadius: 7 }} onPress={() => { setCoridersVisible(true); setItem(item) }}>
-                            <Text style={{ color: GlobalColors.background, textAlign: 'center' }}>
-                                Coriders:  {item.coriders?.length}
-                            </Text>
-                        </TouchableOpacity>
-                        <CoriderModal
-                            visible={coridersVisible}
-                            coriders={selectedItem?.coriders}
-                            onClose={() => setCoridersVisible(false)}
-                        />
-
+                        </View>
+                        <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                            <Text style={{ fontStyle: 'italic', fontSize: 12, marginBottom: -5 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
+                            <Text style={{ fontWeight: 'bold', fontSize: 12, marginBottom: -5 }}> to </Text>
+                            <Text style={{ fontStyle: 'italic', fontSize: 12 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
+                        </View>
                     </View>
-                    <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                        <Text style={{ fontStyle: 'italic', fontSize: 12, marginBottom: -5 }}>{item?.startDate?.toDate().getDate()} {monthNames[item?.startDate?.toDate().getMonth()]} {item?.startDate?.toDate().getFullYear()}</Text>
-                        <Text style={{ fontWeight: 'bold', fontSize: 12, marginBottom: -5 }}> to </Text>
-                        <Text style={{ fontStyle: 'italic', fontSize: 12 }}>{item?.endDate?.toDate().getDate()} {monthNames[item?.endDate?.toDate().getMonth()]} {item?.endDate?.toDate().getFullYear()}</Text>
+                </View>
+                <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
+                <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, paddingHorizontal: 10, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
+                <View style={{ flexDirection: 'row' }}>
+                    <View style={{ flexDirection: 'row', paddingHorizontal: 5, paddingVertical: 3 }}>
+                        <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
+                        <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
+                    </View>
+
+                    <TouchableOpacity style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }} onPress={() => { setViewSchedule(true) }}>
+                        {daysOfWeek.map((day, index) => (
+                            <View key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
+                                <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
+                            </View>
+                        ))}
+                    </TouchableOpacity>
+                </View>
+
+                <View style={{ paddingHorizontal: 10 }}>
+                    <View style={{ flexDirection: 'row' }}>
+                        <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+                        <Text style={styles.text}> From: {item.from.name} </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row' }}>
+                        <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
+                        <Text style={styles.text}> To: {item.to.name} </Text>
                     </View>
                 </View>
-            </View>
-            <Text style={[styles.textBold, { marginHorizontal: 10, color: item.userData.orgName == 'Unverified Institute' ? GlobalColors.error : GlobalColors.text }]}>{item.userData.orgName}</Text>
-            <Text style={[styles.textBold, { color: GlobalColors.primary, fontSize: 14, paddingHorizontal: 10, textAlign: 'center', marginLeft: 'auto' }]}>Seats: {item.seats}</Text>
-            <View style={{ flexDirection: 'row' }}>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 5, paddingVertical: 3 }}>
-                    <Text style={[styles.preferences, { textDecorationLine: item.music ? 'none' : 'line-through' }]}>Music</Text>
-                    <Text style={[styles.preferences, { textDecorationLine: item.ac ? 'none' : 'line-through' }]}>AC</Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', marginLeft: 'auto', marginVertical: 2, paddingRight: 7 }}>
-                    {daysOfWeek.map((day, index) => (
-                        <TouchableOpacity key={index} style={[styles.dayContainer, item?.schedule[day] && styles.activeDay]}>
-                            <Text style={[styles.dayText, item?.schedule[day] && styles.activeText]}>{day[0]}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            <View style={{ paddingHorizontal: 10 }}>
                 <View style={{ flexDirection: 'row' }}>
-                    <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> From: {item.from.name} </Text>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.accept }]} onPress={async () => await handleAcceptance(item.id)}>
+                        <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
+                        setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
+                        console.log(item)
+                        console.log(item.id)
+                    }}>
+                        <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
+                    </TouchableOpacity>
+
                 </View>
-                <View style={{ flexDirection: 'row' }}>
-                    <Icon name="map-marker-alt" type="font-awesome-5" color={GlobalColors.primary} size={15} />
-                    <Text style={styles.text}> To: {item.to.name} </Text>
-                </View>
-            </View>
-            <View style={{ flexDirection: 'row' }}>
-                <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.accept }]} onPress={async () => await handleAcceptance(item.id)}>
-                    <Text style={[styles.textBold, { color: GlobalColors.background }]}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.button, { backgroundColor: GlobalColors.error }]} onPress={() => {
-                    setDeclinedRequests(prevState => [...prevState, item.id]); // Add declined request ID
-                    console.log(item)
-                    console.log(item.id)
-                }}>
-                    <Text style={[styles.textBold, { color: GlobalColors.background }]}>Decline</Text>
-                </TouchableOpacity>
 
             </View>
-
-        </View>
-    );
+        </>
+        )
+    };
     useEffect(() => {
         // Real-time listener for response status changes
         if (selectedRequestId) {

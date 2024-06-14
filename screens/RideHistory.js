@@ -67,10 +67,11 @@ const MyRidesScreen = () => {
     };
     useEffect(() => {
         if(!isLoading){
+            console.log('filteringgg')
         const filtered = rides.filter(ride => {
-            const isHostMatch = ride.data.Host === search;
-            const isRiderMatch = ride.data.Riders.some(rider => rider.rider === search);
-            const createdDate = new Date(ride.data.created);
+            const isHostMatch = ride.data.Host === search?.id;
+            const isRiderMatch = ride.data.Riders.some(rider => rider.rider === search?.id);
+            const createdDate = new Date(ride?.data?.created);
             const isWithinDateRange = (!startDate || createdDate >= new Date(startDate)) &&
                 (!endDate || createdDate <= new Date(endDate));
 
@@ -186,7 +187,8 @@ const MyRidesScreen = () => {
                     <View style={rideHistorystyles.rideDetails}>
                         <Text style={rideHistorystyles.rideText}>From:{item.from?.name}</Text>
                         <Text style={rideHistorystyles.rideText}>To: {item.to?.name}</Text>
-                        <Text style={rideHistorystyles.rideText}>{item.startDate ? `${item.startDate.toDate().toLocaleDateString()} to ${item.endDate.toDate().toLocaleDateString()}` : item.data.created.toDate().toLocaleString([], {
+       
+                        <Text style={rideHistorystyles.rideText}>{item.startDate ? `${item.startDate.toDate().toLocaleDateString()} to ${item.endDate.toDate().toLocaleDateString()}` : item.data?.created?.toDate().toLocaleString([], {
                             year: 'numeric',
                             month: '2-digit',
                             day: '2-digit',
@@ -207,6 +209,7 @@ const MyRidesScreen = () => {
             <View style={rideHistorystyles.eachRide}>
                 <View style={rideHistorystyles.rideItem}>
                     <View style={rideHistorystyles.rideDetails}>
+                    {console.log('startq', item.startDate, 'end', item.endDate)}
                         <Text style={rideHistorystyles.rideText}>From:{item.userRide.from?.name}</Text>
                         <Text style={rideHistorystyles.rideText}>To: {item.userRide.to?.name}</Text>
                         <Text style={rideHistorystyles.rideText}>{item.userRide.startDate ? `${item.userRide.startDate.toDate().toLocaleDateString()} to ${item.userRide.endDate.toDate().toLocaleDateString()}` : item.data.created.toDate().toLocaleString([], {
