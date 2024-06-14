@@ -507,34 +507,33 @@ const rideHistorystyles = StyleSheet.create({
         color: 'black',
     },
     InProgress: {
-        flex: 1,
         backgroundColor: 'orange',
         justifyContent: 'center',
         alignItems: 'center',
-        borderRadius: 35,
-        marginVertical: 10,
-        padding: 5
+        borderRadius: 20,
+        marginVertical: 20,
+        padding: 5,
+        height:50
     },
     Completed: {
-        flex: 1,
         backgroundColor: 'green',
         justifyContent: 'center',
         alignItems: 'center',
         borderRadius: 35,
         marginVertical: 10,
-        padding: 5
+        padding: 5,
+        height:50
     },
     Cancelled: {
-        flex: 1,
         backgroundColor: 'red',
         justifyContent: 'center',
         alignItems: 'center',
         borderRadius: 35,
         marginVertical: 10,
-        padding: 5
+        padding: 5,
+        height:50
     },
     Booked: {
-        flex: 1,
         backgroundColor: GlobalColors.primary,
         justifyContent: 'center',
         alignItems: 'center',
@@ -545,6 +544,7 @@ const rideHistorystyles = StyleSheet.create({
     statusText: {
         color: 'white',
         fontWeight: 'bold',
+        paddingHorizontal:20,
     },
     // Add more styles as needed
 });

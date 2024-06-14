@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Modal } from 'react-native';
 import Picker from '../components/Picker';
 import CoriderModal from '../components/CoridersModal';
+import { useSelector } from 'react-redux';
 
 
 const ResponseRider = ({ route }) => {

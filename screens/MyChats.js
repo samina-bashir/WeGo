@@ -11,7 +11,7 @@ import { useIsFocused, useNavigation } from "@react-navigation/native";
 const MessageCard = ({ sender, lastMessage, time}) => {
   const navigation=useNavigation();
   const handlePress = () => {
-    console.log(sender)
+    console.log('senderrr',sender.name)
     navigation.navigate('ChatScreen',sender)
   };
   return (

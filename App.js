@@ -329,9 +329,11 @@ export default function App() {
       <Provider store={Store}>
         <StripeProvider publishableKey={STRIPE_KEY}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Splash" component={SplashScreen} />
+
+          <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
             <Stack.Screen name="RequestCreation" component={RequestCreationScreen} />
-            <Stack.Screen name="DuringRideHost" component={DuringRideHost} />
+     
             <Stack.Screen name="DuringRide" component={DuringRideScreen} />
             <Stack.Screen name="ResponseScheduledHost" component={ResponseScheduledHost} />
             <Stack.Screen name="ResponseScheduledRider" component={ResponseScheduledRider} />

@@ -14,7 +14,7 @@ export default function FeedbackHost(props) {
   const [isOverlayVisible, setOverlayVisible] = useState(props.visible);
   const [feedbackSent, setFeedbackSent] = useState([]);
   const navigation = useNavigation();
-  const currentUser = { _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
 
   useEffect(() => {
     if (feedbackSent.length === props.riders.length && props.riders.length != 0) {
@@ -74,6 +74,7 @@ export default function FeedbackHost(props) {
               imageSize={20}
               startingValue={0}
               onFinishRating={(rating) => {
+                console.log('rated')
                 const updatedRiderRatings = [...riderRating];
                 updatedRiderRatings[index] = rating;
                 setRiderRating(updatedRiderRatings);

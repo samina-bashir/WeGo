@@ -11,7 +11,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { Icon } from 'react-native-elements';
 
 export default function ChatScreen() {
-  const currentUser = { _id: "FZxbp2UoJxThVSBIjIIbGEA3Z202" }//useSelector((state) => state.user.user);
+  const currentUser = useSelector((state) => state.user.user);
   const chattingTo = useRoute().params;
   const [messages, setMessages] = useState([]);
   const navigation= useNavigation();

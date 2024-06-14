@@ -94,7 +94,7 @@ const FindRiderScreen = () => {
                 threshHold = (parseInt(result?.routes[0]?.duration?.split('s')[0]) - myReqData?.routeTime) * 100 / myReqData?.routeTime
                 // alert(myReqData?.routeTime +"  - "+ parseInt(result?.routes?.[0]?.duration?.split('s')?.[0]) +" : "+  myReqData?.routeTime )
                 // alert(" th "+Math.round(threshHold))
-                var threshHoldDistance =( result?.routes[0]?.distanceMeters / 1000 - MyReqData.routeDistance )* 100 / MyReqData.routeDistance;
+                var threshHoldDistance =( result?.routes[0]?.distanceMeters / 1000 - myReqData.routeDistance )* 100 / myReqData.routeDistance;
                 
                 console.log('thresh', threshHold);
                 console.log('extra', extraTime)

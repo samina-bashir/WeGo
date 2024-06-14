@@ -39,7 +39,7 @@ const DuringRideHost = () => {
     latitudeDelta: 0.0102,
     longitudeDelta: 0.0101,
   };
-  const currentUser = useSelector((state) => state.user.user);
+  const currentUser = 'FZxbp2UoJxThVSBIjIIbGEA3Z202';
   //{ _id: 'vzKZXzwFtcfEIG7ctsqmLXsfIJT2' } //
   const isLoading = useSelector(state => state.ride.isLoading);
   const rideDetails = useSelector(state => state.ride.rideDetails);
@@ -55,7 +55,7 @@ const DuringRideHost = () => {
   const showDirection = useSelector(state => state.ride.showDirections);
   const minutesPassed = useSelector(state => state.ride.minutesPassed);
   const navigation = useNavigation();
-  const rideID = useRoute().params?.requestId;
+  const rideID = '0reA4WR48xzT1xUdR0J1';
   //'Ri5o1r474TkoTNC0XUZ6';//
   const mapRef = useRef();
   const location = useSelector(state => state.ride.location)
